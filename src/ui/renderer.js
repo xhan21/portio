@@ -1,6 +1,6 @@
 const $ = id => document.getElementById(id);
 const act = (kind, value) => window.duo.act(kind, value).catch(() => {});
-let state, drawnServices = '', drawnNotifications = '', drag = null, scrollFrame = 0, suppressClick = false;
+let state, drawnServices = '', drawnNotifications = '', shownTab = '', drag = null, scrollFrame = 0, suppressClick = false;
 function el(tag, className, text) { const item = document.createElement(tag); item.className = className; if (text !== undefined) item.textContent = text; return item; }
 function drawTabs() {
   $('tabs').replaceChildren(...state.tabs.map(t => {
@@ -10,6 +10,11 @@ function drawTabs() {
     const close = el('button', 'tab-close', '×'); close.setAttribute('aria-label', t.title + 'を閉じる'); close.onclick = () => act('close', t.id);
     tab.append(choose, close); return tab;
   }));
+  const selected = state.active + ':' + state.tabs.find(t => t.selected)?.id;
+  if (selected !== shownTab) {
+    shownTab = selected;
+    $('tabs').querySelector('.selected')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  }
 }
 function clearDropMark() { for (const tab of $('tabs').children) tab.classList.remove('drop-before', 'drop-after'); }
 function dropBefore(x) {

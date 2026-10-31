@@ -33,6 +33,8 @@ Duo Chromium 0.2.1's settings and website storage are retained. Quit the old app
 
 Use **「＋ 追加」** beside 「すぐに開く」 to save a name and an `https://` or `http://` URL. Each space supports up to 20 custom shortcuts. Use **「…」** beside an added item to edit or delete it. Deleting a shortcut keeps its open page intact.
 
+Use **「＋」** immediately after the open tabs to add a new tab. The button remains visible when tabs overflow, and the newly opened tab scrolls into view.
+
 Drag a tab title left or right to change its position.
 
 Notification allow/block choices are remembered separately for each website origin and space. Open **「サイトの通知」** in the sidebar to review or reset a choice. Reload the site after resetting; its next notification request will ask again. Earlier versions did not save these choices, so the first request after updating still needs a decision. Camera, microphone and clipboard permissions remain valid only until the app exits.
