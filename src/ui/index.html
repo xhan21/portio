@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'none'">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Portio</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="renderer.js" defer></script>
+</head>
+<body>
+  <aside>
+    <div class="brand"><img class="logo" src="icon.svg" alt="" width="40" height="40"><div><strong>Portio</strong><small>ふたつの自分、ひとつの場所。</small></div></div>
+    <p class="section-label">スペース</p>
+    <button class="space" data-space="personal"><span class="space-icon">私</span>個人<span class="key">⌘1</span></button>
+    <button class="space" data-space="university"><span class="space-icon">学</span>大学<span class="key">⌘2</span></button>
+    <div class="divider"></div>
+    <p class="section-label">すぐに開く</p>
+    <nav id="services"></nav>
+    <div class="sidebar-bottom"><p id="space-status"></p><button id="help">使い方とログインについて</button><small><span id="version"></span></small></div>
+  </aside>
+  <main>
+    <header>
+      <div class="tabbar"><div id="tabs" role="tablist" aria-label="開いているタブ"></div><button id="new" aria-label="新しいタブ" title="新しいタブ（⌘T）">＋</button></div>
+      <div class="toolbar">
+        <button id="back" aria-label="戻る" title="戻る">←</button><button id="forward" aria-label="進む" title="進む">→</button><button id="reload" aria-label="再読み込み" title="再読み込み">↻</button><button id="home" aria-label="スタート" title="スタート">⌂</button>
+        <form id="address-form"><input id="address" aria-label="アドレスと検索" placeholder="URLを入力、または検索" autocomplete="off" spellcheck="false"><span id="space-badge"></span></form>
+      </div>
+    </header>
+    <div id="notice" hidden role="status"><span></span><button id="dismiss" aria-label="メッセージを閉じる">×</button></div>
+    <section id="home-content">
+      <div class="home-inner"><p class="eyebrow" id="eyebrow"></p><h1 id="greeting"></h1><p class="intro">いつもの場所へ、ここから。</p><div id="cards"></div><p class="footnote">このスペースでのログイン状態を保存します。<br>初回は、用途に合ったアカウントでログインしてください。</p></div>
+    </section>
+  </main>
+</body>
+</html>
