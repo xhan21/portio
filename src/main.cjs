@@ -3,6 +3,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const { randomUUID } = require('node:crypto');
+const { NotificationStore, notificationContext } = require('./notifications.cjs');
 const { SPACES, SERVICES, name, webURL, resolveAddress, restorable, readState, preferences, shortcutData, reorderTabs } = require('./core.cjs');
 
 // Keep the original internal name: Chromium uses it for the cookie-encryption Keychain entry.
@@ -15,10 +16,13 @@ else app.whenReady().then(start);
 const uiFile = path.join(__dirname, 'ui', 'index.html');
 const uiURL = pathToFileURL(uiFile).href;
 const stateFile = path.join(app.getPath('userData'), 'session.json');
+const notifications = new NotificationStore(path.join(app.getPath('userData'), 'notifications.json'));
+const pendingNotifications = new Map();
 const spaces = Object.fromEntries(SPACES.map(s => [s, { tabs: [], selected: null, shortcuts: [] }]));
 const sessions = {};
 let win, active = 'personal', sequence = 0, saveTimer, closing = false, finishing = false;
 let shortcutEditor = null;
+let notificationSettings = false, notificationError = '';
 const current = () => spaces[active].tabs.find(t => t.id === spaces[active].selected);
 const contents = t => t?.wc && !t.wc.isDestroyed() ? t.wc : null;
 const partition = s => 'persist:duo-' + s;
@@ -46,6 +50,7 @@ function publish() {
   win.setTitle(`${name(active)} — Portio`);
   win.webContents.send('duo:state', {
     version: app.getVersion(), active, spaceName: name(active), services: servicesFor(active), shortcutEditor,
+    notificationSettings: notificationSettings ? { entries: notifications.list(active), error: notificationError } : null,
     tabs: spaces[active].tabs.map(t => ({ id: t.id, title: t.title, selected: t.id === tab?.id, loading: t.loading })),
     current: tab ? { id: tab.id, url: tab.url, home: !tab.view, loading: tab.loading, error: tab.error, back: contents(tab)?.navigationHistory.canGoBack() || false, forward: contents(tab)?.navigationHistory.canGoForward() || false } : null
   });
@@ -57,7 +62,7 @@ function layout() {
   const [width, height] = win.getContentSize();
   const selected = current();
   for (const s of SPACES) for (const t of spaces[s].tabs) if (contents(t)) {
-    t.view.setVisible(t === selected && !shortcutEditor);
+    t.view.setVisible(t === selected && !shortcutEditor && !notificationSettings);
     t.view.setBounds({ x: 224, y: t.error ? 138 : 96, width: Math.max(1, width - 224), height: Math.max(1, height - (t.error ? 138 : 96)) });
   }
 }
@@ -156,11 +161,41 @@ function setupSession(space) {
   sessions[space] = ses;
   const grants = new Set();
   const key = (origin, permission) => `${origin}|${permission}`;
-  ses.setPermissionCheckHandler((_wc, permission, origin) => grants.has(key(origin, permission)));
+  ses.setPermissionCheckHandler((wc, permission, origin, details) => {
+    if (permission !== 'notifications') return grants.has(key(origin, permission));
+    if (wc?.isDestroyed()) return false;
+    const site = notificationContext(origin, wc ? wc.getURL() : null, details.embeddingOrigin);
+    if (details.requestingUrl && notificationContext(details.requestingUrl, site) !== site) return false;
+    return !!site && notifications.get(space, site) === true;
+  });
   ses.setPermissionRequestHandler(async (wc, permission, callback, details) => {
     const labels = { 'clipboard-read': 'クリップボードの読み取り', 'clipboard-sanitized-write': 'クリップボードへの書き込み', notifications: '通知の表示', fullscreen: '全画面表示', media: 'カメラ・マイクの使用' };
     if (!labels[permission] || !wc || wc.isDestroyed() || !webURL(details.requestingUrl || wc.getURL())) return callback(false);
     const origin = new URL(details.requestingUrl || wc.getURL()).origin;
+    if (permission === 'notifications') {
+      const site = notificationContext(details.requestingUrl || wc.getURL(), wc.getURL());
+      if (!site || !win || win.isDestroyed() || closing) return callback(false);
+      const known = notifications.get(space, site);
+      if (known !== undefined) return callback(known);
+      const requestKey = key(space, site);
+      if (!pendingNotifications.has(requestKey)) {
+        const decision = (async () => {
+          const { response } = await dialog.showMessageBox(win, { type: 'question', message: '通知の表示を許可しますか？', detail: `${name(space)}用スペース\n${site}\nこの選択を保存し、次回の起動後も使います。\n「サイトの通知」からリセットできます。`, buttons: ['許可しない', '許可する'], defaultId: 0, cancelId: 0 });
+          if (wc.isDestroyed() || notificationContext(site, wc.getURL()) !== site || closing) return false;
+          const allowed = response === 1;
+          try { notifications.set(space, site, allowed); }
+          catch {
+            await dialog.showMessageBox(win, { type: 'warning', message: '通知の設定を保存できませんでした。', detail: '保存先の空き容量を確認してください。今回は通知を許可していません。' });
+            return false;
+          }
+          publish();
+          return allowed;
+        })().catch(() => false).finally(() => pendingNotifications.delete(requestKey));
+        pendingNotifications.set(requestKey, decision);
+      }
+      const allowed = await pendingNotifications.get(requestKey);
+      return callback(allowed && !wc.isDestroyed() && notificationContext(site, wc.getURL()) === site);
+    }
     if (grants.has(key(origin, permission))) return callback(true);
     const { response } = await dialog.showMessageBox(win, { type: 'question', message: `${labels[permission]}を許可しますか？`, detail: `${name(space)}用スペース\n${origin}\n許可はPortioの終了まで有効です。`, buttons: ['許可しない', '許可する'], defaultId: 0, cancelId: 0 });
     if (response === 1) grants.add(key(origin, permission));
@@ -179,9 +214,18 @@ function help() {
 function focusAddress() { win.webContents.focus(); win.webContents.send('duo:focus-address'); }
 function action(kind, value) {
   if (shortcutEditor && !['state', 'shortcut-save', 'shortcut-remove', 'shortcut-cancel', 'help'].includes(kind)) return;
+  if (notificationSettings && !['state', 'notifications-reset', 'notifications-close', 'help'].includes(kind)) return;
   const t = current(), wc = contents(t);
   switch (kind) {
     case 'state': publish(); break;
+    case 'notifications': notificationSettings = true; notificationError = ''; update(); break;
+    case 'notifications-close': notificationSettings = false; update(); break;
+    case 'notifications-reset': {
+      if (!notificationSettings || notifications.get(active, value) === undefined) break;
+      try { notifications.set(active, value, null); notificationError = ''; }
+      catch { notificationError = '設定を保存できませんでした。保存先の空き容量を確認してください。'; }
+      publish(); break;
+    }
     case 'space': if (SPACES.includes(value)) { active = value; update(); } break;
     case 'new': newTab(active); break;
     case 'select': if (spaces[active].tabs.some(t => t.id === value)) { spaces[active].selected = value; update(); } break;
@@ -281,7 +325,7 @@ function start() {
     action(kind, value);
   });
   Menu.setApplicationMenu(Menu.buildFromTemplate([
-    { label: 'Portio', submenu: [{ label: 'Portioについて', click: () => app.showAboutPanel() }, { type: 'separator' }, { role: 'hide', label: 'Portioを隠す' }, { role: 'hideOthers', label: 'ほかを隠す' }, { role: 'unhide', label: 'すべてを表示' }, { type: 'separator' }, { label: 'Portioを終了', accelerator: 'CmdOrCtrl+Q', click: () => win.close() }] },
+    { label: 'Portio', submenu: [{ label: 'Portioについて', click: () => app.showAboutPanel() }, { label: 'サイトの通知…', click: () => action('notifications') }, { type: 'separator' }, { role: 'hide', label: 'Portioを隠す' }, { role: 'hideOthers', label: 'ほかを隠す' }, { role: 'unhide', label: 'すべてを表示' }, { type: 'separator' }, { label: 'Portioを終了', accelerator: 'CmdOrCtrl+Q', click: () => win.close() }] },
     { label: 'ファイル', submenu: [{ label: '新しいタブ', accelerator: 'CmdOrCtrl+T', click: () => action('new') }, { label: 'タブを閉じる', accelerator: 'CmdOrCtrl+W', click: () => closeTab(current()) }, { label: 'アドレスを入力', accelerator: 'CmdOrCtrl+L', click: focusAddress }] },
     { label: '編集', submenu: [{ role: 'undo' }, { role: 'redo' }, { type: 'separator' }, { role: 'cut' }, { role: 'copy' }, { role: 'paste' }, { role: 'selectAll' }] },
     { label: '表示', submenu: [{ label: '個人', accelerator: 'CmdOrCtrl+1', click: () => action('space', 'personal') }, { label: '大学', accelerator: 'CmdOrCtrl+2', click: () => action('space', 'university') }, { label: '再読み込み', accelerator: 'CmdOrCtrl+R', click: () => action('reload') }, { type: 'separator' }, { role: 'togglefullscreen' }] },

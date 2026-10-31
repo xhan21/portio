@@ -17,7 +17,7 @@
     <div class="divider"></div>
     <div class="service-heading"><p class="section-label">すぐに開く</p><button id="shortcut-add" aria-label="すぐに開くに追加" title="すぐに開くに追加">＋ 追加</button></div>
     <nav id="services"></nav>
-    <div class="sidebar-bottom"><p id="space-status"></p><button id="help">使い方とログインについて</button><small><span id="version"></span></small></div>
+    <div class="sidebar-bottom"><p id="space-status"></p><button id="notifications">サイトの通知</button><button id="help">使い方とログインについて</button><small><span id="version"></span></small></div>
   </aside>
   <main>
     <header>
@@ -40,6 +40,14 @@
       <p id="shortcut-error" role="alert"></p>
       <div class="dialog-actions"><button id="shortcut-remove" type="button">削除</button><span></span><button id="shortcut-cancel" type="button">キャンセル</button><button class="primary" type="submit">保存</button></div>
     </form>
+  </dialog>
+  <dialog id="notification-dialog" aria-labelledby="notification-title">
+    <h2 id="notification-title">サイトの通知</h2>
+    <p id="notification-space"></p>
+    <p class="notification-hint">通知の許可・ブロックを、次回の起動後も記憶します。<br>リセットすると、次にサイトが通知を求めたときに確認します。対象のページを再読み込みしてください。</p>
+    <div id="notification-list"></div>
+    <p id="notification-error" role="alert"></p>
+    <div class="dialog-actions"><span></span><button id="notifications-close" class="primary">閉じる</button></div>
   </dialog>
 </body>
 </html>

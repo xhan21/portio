@@ -1,6 +1,6 @@
 const $ = id => document.getElementById(id);
 const act = (kind, value) => window.duo.act(kind, value).catch(() => {});
-let state, drawnServices = '', drag = null, scrollFrame = 0, suppressClick = false;
+let state, drawnServices = '', drawnNotifications = '', drag = null, scrollFrame = 0, suppressClick = false;
 function el(tag, className, text) { const item = document.createElement(tag); item.className = className; if (text !== undefined) item.textContent = text; return item; }
 function drawTabs() {
   $('tabs').replaceChildren(...state.tabs.map(t => {
@@ -41,7 +41,7 @@ function finishDrag(redraw = true) {
 }
 $('tabs').addEventListener('pointerdown', event => {
   const choose = event.target.closest('.tab-select');
-  if (!choose || event.button !== 0 || state.shortcutEditor) return;
+  if (!choose || event.button !== 0 || state.shortcutEditor || state.notificationSettings) return;
   drag = { id: choose.closest('.tab').dataset.id, space: state.active, ids: state.tabs.map(t => t.id).join(','), x: event.clientX, y: event.clientY, startX: event.clientX, startY: event.clientY, pointerId: event.pointerId, element: choose, started: false };
   choose.setPointerCapture(event.pointerId);
 });
@@ -71,11 +71,12 @@ $('shortcut-add').onclick = () => act('shortcut-add');
 $('shortcut-cancel').onclick = () => act('shortcut-cancel');
 $('shortcut-remove').onclick = () => act('shortcut-remove');
 $('shortcut-dialog').addEventListener('cancel', event => { event.preventDefault(); act('shortcut-cancel'); });
+$('notification-dialog').addEventListener('cancel', event => { event.preventDefault(); act('notifications-close'); });
 $('shortcut-form').addEventListener('submit', event => {
   event.preventDefault(); act('shortcut-save', JSON.stringify({ name: $('shortcut-name').value, url: $('shortcut-url').value }));
 });
 document.querySelectorAll('[data-space]').forEach(button => button.addEventListener('click', () => act('space', button.dataset.space)));
-for (const id of ['new', 'back', 'forward', 'reload', 'home', 'help', 'dismiss']) $(id).addEventListener('click', () => act(id));
+for (const id of ['new', 'back', 'forward', 'reload', 'home', 'help', 'dismiss', 'notifications', 'notifications-close']) $(id).addEventListener('click', () => act(id));
 $('address-form').addEventListener('submit', event => { event.preventDefault(); act('navigate', $('address').value); $('address').blur(); });
 window.duo.onFocusAddress(() => { $('address').focus(); $('address').select(); });
 window.duo.onState(next => {
@@ -97,7 +98,7 @@ window.duo.onState(next => {
   $('notice').hidden = !next.current?.error;
   $('notice').querySelector('span').textContent = next.current?.error || '';
   // Loading/title updates must not replace the element being dragged.
-  if (drag && (drag.space !== next.active || drag.ids !== next.tabs.map(t => t.id).join(',') || next.shortcutEditor)) finishDrag();
+  if (drag && (drag.space !== next.active || drag.ids !== next.tabs.map(t => t.id).join(',') || next.shortcutEditor || next.notificationSettings)) finishDrag();
   if (!drag) drawTabs();
   const serviceKey = JSON.stringify([next.active, next.services]);
   if (drawnServices !== serviceKey) {
@@ -121,5 +122,24 @@ window.duo.onState(next => {
       modal.showModal(); $('shortcut-name').focus();
     }
   } else if (modal.open) modal.close();
+  const settings = next.notificationSettings, notificationDialog = $('notification-dialog');
+  if (settings) {
+    $('notification-space').textContent = next.spaceName + '用スペース';
+    $('notification-error').textContent = settings.error;
+    const key = JSON.stringify([next.active, settings.entries]);
+    if (key !== drawnNotifications) {
+      drawnNotifications = key;
+      $('notification-list').replaceChildren(...settings.entries.map(entry => {
+        const row = el('div', 'notification-row'), description = el('div', 'notification-site');
+        description.append(el('strong', '', entry.origin), el('span', '', entry.allowed ? '許可済み' : 'ブロック中'));
+        const reset = el('button', 'notification-reset', 'リセット');
+        reset.setAttribute('aria-label', entry.origin + 'の通知設定をリセット');
+        reset.onclick = () => act('notifications-reset', entry.origin);
+        row.append(description, reset); return row;
+      }));
+      if (!settings.entries.length) $('notification-list').append(el('p', 'notification-empty', '保存された通知の設定はありません。'));
+    }
+    if (!notificationDialog.open) notificationDialog.showModal();
+  } else if (notificationDialog.open) notificationDialog.close();
 });
 act('state');

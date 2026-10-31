@@ -35,6 +35,8 @@ Use **「＋ 追加」** beside 「すぐに開く」 to save a name and an `htt
 
 Drag a tab title left or right to change its position.
 
+Notification allow/block choices are remembered separately for each website origin and space. Open **「サイトの通知」** in the sidebar to review or reset a choice. Reload the site after resetting; its next notification request will ask again. Earlier versions did not save these choices, so the first request after updating still needs a decision. Camera, microphone and clipboard permissions remain valid only until the app exits.
+
 ## Limits and privacy
 
 - Built with Electron and Chromium; it is not Google Chrome.
@@ -43,7 +45,7 @@ Drag a tab title left or right to change its position.
 - No extensions, password manager or Chrome sync.
 - Spaces separate sign-ins; they do not hide data from another person using the same Mac account.
 - Websites communicate directly with their own services. Portio adds no analytics, ads or cloud sync.
-- Cookies, website storage, restored tabs and custom shortcuts live in `~/Library/Application Support/DuoChromium/`. The legacy folder and encryption identity are preserved for continuity. No user profiles are included in the repository or release.
+- Cookies, website storage, restored tabs, custom shortcuts and notification choices live in `~/Library/Application Support/DuoChromium/`. The legacy folder and encryption identity are preserved for continuity. No user profiles are included in the repository or release.
 
 See [validation and known limits](TESTING.md).
 
