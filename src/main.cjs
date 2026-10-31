@@ -169,7 +169,7 @@ function setupSession(space) {
   });
 }
 function help() {
-  dialog.showMessageBox(win, { title: 'Portioについて', message: '個人と大学、ふたつの作業場所。', detail: `左側でスペースを選び、最初にそれぞれのアカウントでログインしてください。Canvaなどのログイン状態はスペースごとに保存します。\n\n旧Duo Chromiumのログイン状態と設定は引き継ぎます。ChromeやSafariとは別にログインしてください。Google・大学の認証方式によっては、このアプリからログインできない場合があります。\n\nPortio自体の月額料金はありません。この試作版にブラウザの自動更新はありません。更新版への入れ替えが必要です。\n\nPortio ${app.getVersion()} / Chromium ${process.versions.chrome}` });
+  dialog.showMessageBox(win, { title: 'Portioの使い方', message: '個人と大学、ふたつの作業場所。', detail: `左側でスペースを選び、最初にそれぞれのアカウントでログインしてください。Canvaなどのログイン状態はスペースごとに保存します。\n\n旧Duo Chromiumのログイン状態と設定は引き継ぎます。ChromeやSafariとは別にログインしてください。Google・大学の認証方式によっては、このアプリからログインできない場合があります。\n\nPortio自体の月額料金はありません。この試作版にブラウザの自動更新はありません。更新版への入れ替えが必要です。\n\nPortio ${app.getVersion()} / Chromium ${process.versions.chrome}` });
 }
 function focusAddress() { win.webContents.focus(); win.webContents.send('duo:focus-address'); }
 function action(kind, value) {
@@ -206,6 +206,13 @@ async function finishClose() {
   win.destroy(); win = null; app.quit();
 }
 function start() {
+  app.setAboutPanelOptions({
+    applicationName: 'Portio',
+    applicationVersion: app.getVersion(),
+    version: '',
+    copyright: 'Copyright © 2026 Xu Han',
+    credits: 'MIT License\nhttps://github.com/xhan21/portio'
+  });
   SPACES.forEach(setupSession);
   win = new BrowserWindow({ width: 1240, height: 820, minWidth: 960, minHeight: 640, title: 'Portio', titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 22, y: 20 }, backgroundColor: '#f8faf9', show: false, webPreferences: { ...preferences('duo-ui'), preload: path.join(__dirname, 'preload.cjs') } });
   win.webContents.on('will-navigate', event => event.preventDefault());
@@ -234,11 +241,12 @@ function start() {
     action(kind, value);
   });
   Menu.setApplicationMenu(Menu.buildFromTemplate([
-    { label: 'Portio', submenu: [{ label: 'Portioについて', click: help }, { type: 'separator' }, { role: 'hide', label: 'Portioを隠す' }, { role: 'hideOthers', label: 'ほかを隠す' }, { role: 'unhide', label: 'すべてを表示' }, { type: 'separator' }, { label: 'Portioを終了', accelerator: 'CmdOrCtrl+Q', click: () => win.close() }] },
+    { label: 'Portio', submenu: [{ label: 'Portioについて', click: () => app.showAboutPanel() }, { type: 'separator' }, { role: 'hide', label: 'Portioを隠す' }, { role: 'hideOthers', label: 'ほかを隠す' }, { role: 'unhide', label: 'すべてを表示' }, { type: 'separator' }, { label: 'Portioを終了', accelerator: 'CmdOrCtrl+Q', click: () => win.close() }] },
     { label: 'ファイル', submenu: [{ label: '新しいタブ', accelerator: 'CmdOrCtrl+T', click: () => action('new') }, { label: 'タブを閉じる', accelerator: 'CmdOrCtrl+W', click: () => closeTab(current()) }, { label: 'アドレスを入力', accelerator: 'CmdOrCtrl+L', click: focusAddress }] },
     { label: '編集', submenu: [{ role: 'undo' }, { role: 'redo' }, { type: 'separator' }, { role: 'cut' }, { role: 'copy' }, { role: 'paste' }, { role: 'selectAll' }] },
     { label: '表示', submenu: [{ label: '個人', accelerator: 'CmdOrCtrl+1', click: () => action('space', 'personal') }, { label: '大学', accelerator: 'CmdOrCtrl+2', click: () => action('space', 'university') }, { label: '再読み込み', accelerator: 'CmdOrCtrl+R', click: () => action('reload') }, { type: 'separator' }, { role: 'togglefullscreen' }] },
-    { role: 'windowMenu' }
+    { role: 'windowMenu', label: 'ウインドウ' },
+    { role: 'help', label: 'ヘルプ', submenu: [{ label: 'Portioの使い方', click: help }] }
   ]));
   win.loadFile(uiFile);
 }

@@ -1,7 +1,7 @@
 {
   "name": "portio",
   "productName": "Portio",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "個人と大学、ふたつの作業場所を行き来するMacブラウザ",
   "private": true,
   "main": "src/main.cjs",
