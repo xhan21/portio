@@ -2,7 +2,8 @@ const { app, BrowserWindow, WebContentsView, session, ipcMain, Menu, dialog } = 
 const fs = require('node:fs');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
-const { SPACES, SERVICES, name, webURL, resolveAddress, restorable, readState, preferences } = require('./core.cjs');
+const { randomUUID } = require('node:crypto');
+const { SPACES, SERVICES, name, webURL, resolveAddress, restorable, readState, preferences, shortcutData, reorderTabs } = require('./core.cjs');
 
 // Keep the original internal name: Chromium uses it for the cookie-encryption Keychain entry.
 app.setName('Duo Chromium');
@@ -14,16 +15,20 @@ else app.whenReady().then(start);
 const uiFile = path.join(__dirname, 'ui', 'index.html');
 const uiURL = pathToFileURL(uiFile).href;
 const stateFile = path.join(app.getPath('userData'), 'session.json');
-const spaces = Object.fromEntries(SPACES.map(s => [s, { tabs: [], selected: null }]));
+const spaces = Object.fromEntries(SPACES.map(s => [s, { tabs: [], selected: null, shortcuts: [] }]));
 const sessions = {};
 let win, active = 'personal', sequence = 0, saveTimer, closing = false, finishing = false;
+let shortcutEditor = null;
 const current = () => spaces[active].tabs.find(t => t.id === spaces[active].selected);
 const contents = t => t?.wc && !t.wc.isDestroyed() ? t.wc : null;
 const partition = s => 'persist:duo-' + s;
+const servicesFor = space => [...SERVICES.filter(s => space === 'university' || s.id !== 'classroom'), ...spaces[space].shortcuts.map(s => ({ ...s, custom: true, mark: '↗', hint: new URL(s.url).hostname }))];
+function command(value) { try { return JSON.parse(value); } catch { return null; } }
 
 function snapshot() {
   return { version: 1, active, spaces: Object.fromEntries(SPACES.map(s => [s, {
     selected: Math.max(0, spaces[s].tabs.findIndex(t => t.id === spaces[s].selected)),
+    shortcuts: spaces[s].shortcuts,
     tabs: spaces[s].tabs.map(t => ({ url: restorable(t.url), service: t.service }))
   }])) };
 }
@@ -40,7 +45,7 @@ function publish() {
   const tab = current();
   win.setTitle(`${name(active)} — Portio`);
   win.webContents.send('duo:state', {
-    version: app.getVersion(), active, spaceName: name(active), services: SERVICES.filter(s => active === 'university' || s.id !== 'classroom'),
+    version: app.getVersion(), active, spaceName: name(active), services: servicesFor(active), shortcutEditor,
     tabs: spaces[active].tabs.map(t => ({ id: t.id, title: t.title, selected: t.id === tab?.id, loading: t.loading })),
     current: tab ? { id: tab.id, url: tab.url, home: !tab.view, loading: tab.loading, error: tab.error, back: contents(tab)?.navigationHistory.canGoBack() || false, forward: contents(tab)?.navigationHistory.canGoForward() || false } : null
   });
@@ -52,7 +57,7 @@ function layout() {
   const [width, height] = win.getContentSize();
   const selected = current();
   for (const s of SPACES) for (const t of spaces[s].tabs) if (contents(t)) {
-    t.view.setVisible(t === selected);
+    t.view.setVisible(t === selected && !shortcutEditor);
     t.view.setBounds({ x: 224, y: t.error ? 138 : 96, width: Math.max(1, width - 224), height: Math.max(1, height - (t.error ? 138 : 96)) });
   }
 }
@@ -169,20 +174,54 @@ function setupSession(space) {
   });
 }
 function help() {
-  dialog.showMessageBox(win, { title: 'Portioの使い方', message: '個人と大学、ふたつの作業場所。', detail: `左側でスペースを選び、最初にそれぞれのアカウントでログインしてください。Canvaなどのログイン状態はスペースごとに保存します。\n\n旧Duo Chromiumのログイン状態と設定は引き継ぎます。ChromeやSafariとは別にログインしてください。Google・大学の認証方式によっては、このアプリからログインできない場合があります。\n\nPortio自体の月額料金はありません。この試作版にブラウザの自動更新はありません。更新版への入れ替えが必要です。\n\nPortio ${app.getVersion()} / Chromium ${process.versions.chrome}` });
+  dialog.showMessageBox(win, { title: 'Portioの使い方', message: '個人と大学、ふたつの作業場所。', detail: `左側でスペースを選び、最初にそれぞれのアカウントでログインしてください。Canvaなどのログイン状態はスペースごとに保存します。\n\n「すぐに開く」の「＋ 追加」から、名前とURLを登録できます。追加した項目の「…」で編集・削除できます。タブのタイトルを左右にドラッグすると順番を変えられます。\n\n旧Duo Chromiumのログイン状態と設定は引き継ぎます。ChromeやSafariとは別にログインしてください。Google・大学の認証方式によっては、このアプリからログインできない場合があります。\n\nPortio自体の月額料金はありません。この試作版にブラウザの自動更新はありません。更新版への入れ替えが必要です。\n\nPortio ${app.getVersion()} / Chromium ${process.versions.chrome}` });
 }
 function focusAddress() { win.webContents.focus(); win.webContents.send('duo:focus-address'); }
 function action(kind, value) {
+  if (shortcutEditor && !['state', 'shortcut-save', 'shortcut-remove', 'shortcut-cancel', 'help'].includes(kind)) return;
   const t = current(), wc = contents(t);
   switch (kind) {
     case 'state': publish(); break;
     case 'space': if (SPACES.includes(value)) { active = value; update(); } break;
     case 'new': newTab(active); break;
     case 'select': if (spaces[active].tabs.some(t => t.id === value)) { spaces[active].selected = value; update(); } break;
+    case 'reorder': {
+      const move = command(value);
+      if (move?.space !== active) break;
+      const next = reorderTabs(spaces[active].tabs, move.id, move.beforeId);
+      if (next !== spaces[active].tabs) { spaces[active].tabs = next; update(); }
+      break;
+    }
+    case 'shortcut-add': shortcutEditor = { space: active, id: null, name: '', url: '', error: '' }; update(); break;
+    case 'shortcut-edit': {
+      const shortcut = spaces[active].shortcuts.find(s => s.id === value);
+      if (shortcut) { shortcutEditor = { ...shortcut, space: active, error: '' }; update(); }
+      break;
+    }
+    case 'shortcut-save': {
+      if (!shortcutEditor || shortcutEditor.space !== active) break;
+      const data = shortcutData(command(value));
+      if (!data) { shortcutEditor.error = '名前（40文字以内）と、http:// または https:// で始まるURLを入力してください。'; publish(); break; }
+      const list = spaces[active].shortcuts;
+      const existing = list.find(s => s.id === shortcutEditor.id);
+      if (existing) {
+        if (existing.url !== data.url) for (const tab of spaces[active].tabs) if (tab.service === existing.id) tab.service = null;
+        Object.assign(existing, data);
+      } else if (list.length < 20) list.push({ id: 'custom-' + randomUUID(), ...data });
+      else { shortcutEditor.error = '追加できる項目は、各スペース20件までです。'; publish(); break; }
+      shortcutEditor = null; update(); break;
+    }
+    case 'shortcut-remove': {
+      if (!shortcutEditor?.id || shortcutEditor.space !== active) break;
+      spaces[active].shortcuts = spaces[active].shortcuts.filter(s => s.id !== shortcutEditor.id);
+      for (const tab of spaces[active].tabs) if (tab.service === shortcutEditor.id) tab.service = null;
+      shortcutEditor = null; update(); break;
+    }
+    case 'shortcut-cancel': shortcutEditor = null; update(); break;
     case 'close': closeTab(spaces[active].tabs.find(t => t.id === value)); break;
     case 'navigate': { const url = resolveAddress(value); if (url) load(t, url); else { t.error = 'httpまたはhttpsのアドレスを入力してください。'; update(); } break; }
     case 'service': {
-      const service = SERVICES.find(s => s.id === value && (active === 'university' || s.id !== 'classroom'));
+      const service = servicesFor(active).find(s => s.id === value);
       if (!service) break;
       const existing = spaces[active].tabs.find(t => t.service === value);
       if (existing) { spaces[active].selected = existing.id; if (!existing.view) load(existing, service.url); update(); }
@@ -232,6 +271,7 @@ function start() {
   try { saved = readState(JSON.parse(fs.readFileSync(stateFile, 'utf8'))); } catch { saved = readState(null); }
   active = saved.active;
   for (const s of SPACES) {
+    spaces[s].shortcuts = saved.spaces[s].shortcuts;
     const restored = saved.spaces[s].tabs.map(t => newTab(s, t));
     spaces[s].selected = restored[saved.spaces[s].selected].id;
   }

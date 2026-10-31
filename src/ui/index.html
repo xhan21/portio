@@ -15,7 +15,7 @@
     <button class="space" data-space="personal"><span class="space-icon">私</span>個人<span class="key">⌘1</span></button>
     <button class="space" data-space="university"><span class="space-icon">学</span>大学<span class="key">⌘2</span></button>
     <div class="divider"></div>
-    <p class="section-label">すぐに開く</p>
+    <div class="service-heading"><p class="section-label">すぐに開く</p><button id="shortcut-add" aria-label="すぐに開くに追加" title="すぐに開くに追加">＋ 追加</button></div>
     <nav id="services"></nav>
     <div class="sidebar-bottom"><p id="space-status"></p><button id="help">使い方とログインについて</button><small><span id="version"></span></small></div>
   </aside>
@@ -32,5 +32,14 @@
       <div class="home-inner"><p class="eyebrow" id="eyebrow"></p><h1 id="greeting"></h1><p class="intro">いつもの場所へ、ここから。</p><div id="cards"></div><p class="footnote">このスペースでのログイン状態を保存します。<br>初回は、用途に合ったアカウントでログインしてください。</p></div>
     </section>
   </main>
+  <dialog id="shortcut-dialog" aria-labelledby="shortcut-title">
+    <form id="shortcut-form">
+      <h2 id="shortcut-title"></h2><p id="shortcut-space"></p>
+      <label for="shortcut-name">名前</label><input id="shortcut-name" maxlength="40" required placeholder="例：研究室のサイト" autocomplete="off">
+      <label for="shortcut-url">URL</label><input id="shortcut-url" maxlength="8192" required placeholder="https://example.com/" inputmode="url" autocomplete="off" spellcheck="false">
+      <p id="shortcut-error" role="alert"></p>
+      <div class="dialog-actions"><button id="shortcut-remove" type="button">削除</button><span></span><button id="shortcut-cancel" type="button">キャンセル</button><button class="primary" type="submit">保存</button></div>
+    </form>
+  </dialog>
 </body>
 </html>

@@ -15,8 +15,8 @@ When I asked ChatGPT to operate websites, separate browsers for my personal and 
 ## Features
 
 - Separate cookies and website storage for each space.
-- Service shortcuts, an address/search field and tabs.
-- Restore tabs after restarting; authentication callback URLs are excluded.
+- Service shortcuts, an address/search field and tabs. Add your own websites separately in each space.
+- Drag tabs to reorder them, preserving the current page and its input. Restore their order and selection after restarting; authentication callback URLs are excluded.
 - Free to use. Third-party services may have their own fees.
 
 ## Use on a Mac
@@ -31,6 +31,10 @@ Duo Chromium 0.2.1's settings and website storage are retained. Quit the old app
 
 ⌘1 / ⌘2: switch space · ⌘T / ⌘W: new / close tab · ⌘L: address · ⌘R: reload · ⌘Q: quit.
 
+Use **「＋ 追加」** beside 「すぐに開く」 to save a name and an `https://` or `http://` URL. Each space supports up to 20 custom shortcuts. Use **「…」** beside an added item to edit or delete it. Deleting a shortcut keeps its open page intact.
+
+Drag a tab title left or right to change its position.
+
 ## Limits and privacy
 
 - Built with Electron and Chromium; it is not Google Chrome.
@@ -39,7 +43,7 @@ Duo Chromium 0.2.1's settings and website storage are retained. Quit the old app
 - No extensions, password manager or Chrome sync.
 - Spaces separate sign-ins; they do not hide data from another person using the same Mac account.
 - Websites communicate directly with their own services. Portio adds no analytics, ads or cloud sync.
-- Cookies, website storage and restored tabs live in `~/Library/Application Support/DuoChromium/`. The legacy folder and encryption identity are preserved for continuity. No user profiles are included in the repository or release.
+- Cookies, website storage, restored tabs and custom shortcuts live in `~/Library/Application Support/DuoChromium/`. The legacy folder and encryption identity are preserved for continuity. No user profiles are included in the repository or release.
 
 See [validation and known limits](TESTING.md).
 

@@ -37,12 +37,33 @@ function readState(value) {
   const result = { version: 1, active: SPACES.includes(value?.active) ? value.active : 'personal', spaces: {} };
   for (const space of SPACES) {
     const raw = value?.spaces?.[space];
-    const tabs = Array.isArray(raw?.tabs) ? raw.tabs.slice(0, 20).map(t => ({ url: restorable(t?.url), service: SERVICES.some(s => s.id === t?.service) ? t.service : null })) : [];
-    result.spaces[space] = { tabs: tabs.length ? tabs : [{ url: null, service: null }], selected: Number.isInteger(raw?.selected) ? Math.max(0, Math.min(raw.selected, Math.max(0, tabs.length - 1))) : 0 };
+    const shortcuts = [];
+    for (const item of Array.isArray(raw?.shortcuts) ? raw.shortcuts.slice(0, 20) : []) {
+      const data = shortcutData(item);
+      if (data && typeof item.id === 'string' && /^custom-[\w-]{1,64}$/.test(item.id) && !shortcuts.some(s => s.id === item.id)) shortcuts.push({ id: item.id, ...data });
+    }
+    const services = [...SERVICES.filter(s => space === 'university' || s.id !== 'classroom'), ...shortcuts];
+    const tabs = Array.isArray(raw?.tabs) ? raw.tabs.slice(0, 20).map(t => ({ url: restorable(t?.url), service: services.some(s => s.id === t?.service) ? t.service : null })) : [];
+    result.spaces[space] = { shortcuts, tabs: tabs.length ? tabs : [{ url: null, service: null }], selected: Number.isInteger(raw?.selected) ? Math.max(0, Math.min(raw.selected, Math.max(0, tabs.length - 1))) : 0 };
   }
   return result;
+}
+function shortcutData(value) {
+  if (typeof value?.name !== 'string' || typeof value?.url !== 'string') return null;
+  const name = value.name.trim(), input = value.url.trim();
+  if (!name || name.length > 40 || /[\r\n\0]/.test(name + input) || input.length > 8192) return null;
+  const url = webURL(input);
+  return url ? { name, url } : null;
+}
+function reorderTabs(tabs, id, beforeId) {
+  if (typeof id !== 'string' || (beforeId !== null && typeof beforeId !== 'string') || id === beforeId) return tabs;
+  const tab = tabs.find(t => t.id === id);
+  if (!tab || (beforeId !== null && !tabs.some(t => t.id === beforeId))) return tabs;
+  const next = tabs.filter(t => t !== tab);
+  next.splice(beforeId === null ? next.length : next.findIndex(t => t.id === beforeId), 0, tab);
+  return next.every((t, i) => t === tabs[i]) ? tabs : next;
 }
 function preferences(partition) {
   return { partition, sandbox: true, contextIsolation: true, nodeIntegration: false, nodeIntegrationInWorker: false, nodeIntegrationInSubFrames: false, webSecurity: true, allowRunningInsecureContent: false, webviewTag: false, safeDialogs: true, navigateOnDragDrop: false };
 }
-module.exports = { SPACES, SERVICES, name, webURL, resolveAddress, restorable, readState, preferences };
+module.exports = { SPACES, SERVICES, name, webURL, resolveAddress, restorable, readState, preferences, shortcutData, reorderTabs };
