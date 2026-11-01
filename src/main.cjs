@@ -209,7 +209,7 @@ function setupSession(space) {
   });
 }
 function help() {
-  dialog.showMessageBox(win, { title: 'Portioの使い方', message: '個人と大学、ふたつの作業場所。', detail: `左側でスペースを選び、最初にそれぞれのアカウントでログインしてください。Canvaなどのログイン状態はスペースごとに保存します。\n\n「すぐに開く」の「＋ 追加」から、名前とURLを登録できます。追加した項目の「…」で編集・削除できます。タブのタイトルを左右にドラッグすると順番を変えられます。\n\n旧Duo Chromiumのログイン状態と設定は引き継ぎます。ChromeやSafariとは別にログインしてください。Google・大学の認証方式によっては、このアプリからログインできない場合があります。\n\nPortio自体の月額料金はありません。この試作版にブラウザの自動更新はありません。更新版への入れ替えが必要です。\n\nPortio ${app.getVersion()} / Chromium ${process.versions.chrome}` });
+  dialog.showMessageBox(win, { title: 'Portioの使い方', message: '個人と大学、ふたつの作業場所。', detail: `左側でスペースを選び、最初にそれぞれのアカウントでログインしてください。Canvaなどのログイン状態はスペースごとに保存します。\n\n「すぐに開く」の「＋ 追加」から、名前とURLを登録できます。追加した項目の「…」で編集・削除できます。タブのタイトルを左右にドラッグすると順番を変えられます。\n\nChromeやSafariとは別にログインしてください。Google・大学の認証方式によっては、このアプリからログインできない場合があります。\n\nPortio自体の月額料金はありません。この試作版にブラウザの自動更新はありません。更新版への入れ替えが必要です。\n\nPortio ${app.getVersion()} / Chromium ${process.versions.chrome}` });
 }
 function focusAddress() { win.webContents.focus(); win.webContents.send('duo:focus-address'); }
 function action(kind, value) {

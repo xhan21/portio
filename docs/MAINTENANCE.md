@@ -9,13 +9,13 @@
 - `resources/Portio.svg`：アイコン原本。`npm run icon`で生成物を更新。
 - `scripts/package.cjs`：Apple Silicon向けアプリの作成とアドホック署名。
 
-## 引き継ぎで維持する識別子
+## 保存先と維持する識別子
 
-表示名はPortioですが、0.2.1以前のデータを引き継ぐため以下を維持します。
+ログイン状態と設定を更新後も使えるように、以下の識別子を維持します。利用者向けの説明はPortioの名称に統一し、内部名や保存先の詳細はこの節にまとめます。
 
 - Bundle ID：`jp.local.duochromium`
 - Electron内部名：`Duo Chromium`（macOSのCookie暗号化用Keychain名に使われる）
-- userData：`DuoChromium`
+- userData：`~/Library/Application Support/DuoChromium/`
 - partition：`persist:duo-personal` / `persist:duo-university`
 - IPC名・preload名の`duo`接頭辞
 

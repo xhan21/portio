@@ -25,7 +25,7 @@ When I asked ChatGPT to operate websites, separate browsers for my personal and 
 
 The prototype targets **Apple Silicon (M1 or later)** and was checked on macOS 15.3.2. Intel Macs are untested. Move the locally built app to Applications, then sign in separately in each space. The local build is ad-hoc signed, without Apple Developer ID signing or notarization.
 
-Duo Chromium 0.2.1's settings and website storage are retained. Quit the old app before replacing it. Chrome/Safari sessions are not imported.
+Quit Portio before replacing the app when updating. Sign in separately from Chrome or Safari.
 
 ## Shortcuts
 
@@ -37,7 +37,7 @@ Use **「＋」** immediately after the open tabs to add a new tab. The button r
 
 Drag a tab title left or right to change its position.
 
-Notification allow/block choices are remembered separately for each website origin and space. Open **「サイトの通知」** in the sidebar to review or reset a choice. Reload the site after resetting; its next notification request will ask again. Earlier versions did not save these choices, so the first request after updating still needs a decision. Camera, microphone and clipboard permissions remain valid only until the app exits.
+Notification allow/block choices are remembered separately for each website origin and space. Open **「サイトの通知」** in the sidebar to review or reset a choice. Reload the site after resetting; its next notification request will ask again. If no choice is saved, Portio asks when the site first requests notifications. Camera, microphone and clipboard permissions are valid only until the app exits.
 
 ## Limits and privacy
 
@@ -47,7 +47,7 @@ Notification allow/block choices are remembered separately for each website orig
 - No extensions, password manager or Chrome sync.
 - Spaces separate sign-ins; they do not hide data from another person using the same Mac account.
 - Websites communicate directly with their own services. Portio adds no analytics, ads or cloud sync.
-- Cookies, website storage, restored tabs, custom shortcuts and notification choices live in `~/Library/Application Support/DuoChromium/`. The legacy folder and encryption identity are preserved for continuity. No user profiles are included in the repository or release.
+- Sign-in sessions, website storage, restored tabs, custom shortcuts and notification choices are saved locally on your Mac. Published source code does not include users' accounts, cookies or browsing history.
 
 See [validation and known limits](TESTING.md).
 
