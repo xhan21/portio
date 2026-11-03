@@ -1,9 +1,11 @@
-const { app, BrowserWindow, WebContentsView, session, ipcMain, Menu, dialog } = require('electron');
+const { app, BrowserWindow, WebContentsView, session, ipcMain, Menu, dialog, safeStorage } = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const { randomUUID } = require('node:crypto');
 const { NotificationStore, notificationContext } = require('./notifications.cjs');
+const { PasswordStore } = require('./passwords.cjs');
+const { PasswordController } = require('./password-controller.cjs');
 const { SPACES, SERVICES, name, webURL, resolveAddress, restorable, readState, preferences, shortcutData, reorderTabs } = require('./core.cjs');
 
 // Keep the original internal name: Chromium uses it for the cookie-encryption Keychain entry.
@@ -21,7 +23,7 @@ const pendingNotifications = new Map();
 const spaces = Object.fromEntries(SPACES.map(s => [s, { tabs: [], selected: null, shortcuts: [] }]));
 const sessions = {};
 let win, active = 'personal', sequence = 0, saveTimer, closing = false, finishing = false;
-let shortcutEditor = null;
+let shortcutEditor = null, passwordManager;
 let notificationSettings = false, notificationError = '';
 const current = () => spaces[active].tabs.find(t => t.id === spaces[active].selected);
 const contents = t => t?.wc && !t.wc.isDestroyed() ? t.wc : null;
@@ -50,6 +52,7 @@ function publish() {
   win.setTitle(`${name(active)} — Portio`);
   win.webContents.send('duo:state', {
     version: app.getVersion(), active, spaceName: name(active), services: servicesFor(active), shortcutEditor,
+    passwordSettings: passwordManager?.settings || null,
     notificationSettings: notificationSettings ? { entries: notifications.list(active), error: notificationError } : null,
     tabs: spaces[active].tabs.map(t => ({ id: t.id, title: t.title, selected: t.id === tab?.id, loading: t.loading })),
     current: tab ? { id: tab.id, url: tab.url, home: !tab.view, loading: tab.loading, error: tab.error, back: contents(tab)?.navigationHistory.canGoBack() || false, forward: contents(tab)?.navigationHistory.canGoForward() || false } : null
@@ -62,7 +65,7 @@ function layout() {
   const [width, height] = win.getContentSize();
   const selected = current();
   for (const s of SPACES) for (const t of spaces[s].tabs) if (contents(t)) {
-    t.view.setVisible(t === selected && !shortcutEditor && !notificationSettings);
+    t.view.setVisible(t === selected && !shortcutEditor && !notificationSettings && !passwordManager?.settings);
     t.view.setBounds({ x: 224, y: t.error ? 138 : 96, width: Math.max(1, width - 224), height: Math.max(1, height - (t.error ? 138 : 96)) });
   }
 }
@@ -84,6 +87,7 @@ function makeView(t, windowOptions = {}) {
   t.view.setBackgroundColor('#ffffff');
   const wc = t.view.webContents;
   t.wc = wc;
+  passwordManager?.attach(t);
   win.contentView.addChildView(t.view);
   const refreshURL = () => { t.url = wc.getURL(); t.error = ''; update(); };
   wc.on('did-start-loading', () => { t.loading = true; update(); });
@@ -209,13 +213,16 @@ function setupSession(space) {
   });
 }
 function help() {
-  dialog.showMessageBox(win, { title: 'Portioの使い方', message: '個人と大学、ふたつの作業場所。', detail: `左側でスペースを選び、最初にそれぞれのアカウントでログインしてください。Canvaなどのログイン状態はスペースごとに保存します。\n\n「すぐに開く」の「＋ 追加」から、名前とURLを登録できます。追加した項目の「…」で編集・削除できます。タブのタイトルを左右にドラッグすると順番を変えられます。\n\nChromeやSafariとは別にログインしてください。Google・大学の認証方式によっては、このアプリからログインできない場合があります。\n\nPortio自体の月額料金はありません。この試作版にブラウザの自動更新はありません。更新版への入れ替えが必要です。\n\nPortio ${app.getVersion()} / Chromium ${process.versions.chrome}` });
+  dialog.showMessageBox(win, { title: 'Portioの使い方', message: '個人と大学、ふたつの作業場所。', detail: `左側でスペースを選び、最初にそれぞれのアカウントでログインしてください。Canvaなどのログイン状態はスペースごとに保存します。\n\n「すぐに開く」の「＋ 追加」から、名前とURLを登録できます。追加した項目の「…」で編集・削除できます。タブのタイトルを左右にドラッグすると順番を変えられます。\n\nログイン情報は、右上の鍵ボタン→「＋ このサイトのログインを保存」で確認して保存できます。次回は入力欄をクリックし、アカウントを選ぶと入力されます。保存情報はこのMac内で暗号化し、サイト・スペースごとに分けます。\n\nChromeやSafariとは別にログインしてください。Google・大学の認証方式によっては、このアプリからログインできない場合があります。\n\nPortio自体の月額料金はありません。この試作版にブラウザの自動更新はありません。更新版への入れ替えが必要です。\n\nPortio ${app.getVersion()} / Chromium ${process.versions.chrome}` });
 }
 function focusAddress() { win.webContents.focus(); win.webContents.send('duo:focus-address'); }
 function action(kind, value) {
+  if (passwordManager?.settings && !['state', 'passwords-close', 'password-add', 'password-save', 'password-cancel', 'password-remove'].includes(kind)) return;
   if (shortcutEditor && !['state', 'shortcut-save', 'shortcut-remove', 'shortcut-cancel', 'help'].includes(kind)) return;
   if (notificationSettings && !['state', 'notifications-reset', 'notifications-close', 'help'].includes(kind)) return;
   const t = current(), wc = contents(t);
+  if (kind === 'passwords' || kind.startsWith('password-') || kind === 'passwords-close') return passwordManager?.act(kind, value);
+  if (kind !== 'state') passwordManager?.cancelMenu();
   switch (kind) {
     case 'state': publish(); break;
     case 'notifications': notificationSettings = true; notificationError = ''; update(); break;
@@ -296,6 +303,7 @@ function start() {
     copyright: 'Copyright © 2026 Xu Han',
     credits: 'MIT License\nhttps://github.com/xhan21/portio'
   });
+  passwordManager = new PasswordController({ store: new PasswordStore(path.join(app.getPath('userData'), 'passwords.enc.json'), process.platform === 'darwin' ? safeStorage : null), Menu, dialog, current, window: () => win, space: () => active, canSuggest: () => !closing && !shortcutEditor && !notificationSettings, changed: update });
   SPACES.forEach(setupSession);
   win = new BrowserWindow({ width: 1240, height: 820, minWidth: 960, minHeight: 640, title: 'Portio', titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 22, y: 20 }, backgroundColor: '#f8faf9', show: false, webPreferences: { ...preferences('duo-ui'), preload: path.join(__dirname, 'preload.cjs') } });
   win.webContents.on('will-navigate', event => event.preventDefault());
@@ -322,10 +330,10 @@ function start() {
   ipcMain.handle('duo:action', (event, kind, value) => {
     if (event.sender !== win?.webContents || event.senderFrame !== win.webContents.mainFrame || event.senderFrame.url !== uiURL) throw new Error('Untrusted sender');
     if (typeof kind !== 'string' || (value !== undefined && typeof value !== 'string')) return;
-    action(kind, value);
+    return action(kind, value);
   });
   Menu.setApplicationMenu(Menu.buildFromTemplate([
-    { label: 'Portio', submenu: [{ label: 'Portioについて', click: () => app.showAboutPanel() }, { label: 'サイトの通知…', click: () => action('notifications') }, { type: 'separator' }, { role: 'hide', label: 'Portioを隠す' }, { role: 'hideOthers', label: 'ほかを隠す' }, { role: 'unhide', label: 'すべてを表示' }, { type: 'separator' }, { label: 'Portioを終了', accelerator: 'CmdOrCtrl+Q', click: () => win.close() }] },
+    { label: 'Portio', submenu: [{ label: 'Portioについて', click: () => app.showAboutPanel() }, { label: 'サイトの通知…', click: () => action('notifications') }, { label: 'パスワード…', click: () => action('passwords') }, { type: 'separator' }, { role: 'hide', label: 'Portioを隠す' }, { role: 'hideOthers', label: 'ほかを隠す' }, { role: 'unhide', label: 'すべてを表示' }, { type: 'separator' }, { label: 'Portioを終了', accelerator: 'CmdOrCtrl+Q', click: () => win.close() }] },
     { label: 'ファイル', submenu: [{ label: '新しいタブ', accelerator: 'CmdOrCtrl+T', click: () => action('new') }, { label: 'タブを閉じる', accelerator: 'CmdOrCtrl+W', click: () => closeTab(current()) }, { label: 'アドレスを入力', accelerator: 'CmdOrCtrl+L', click: focusAddress }] },
     { label: '編集', submenu: [{ role: 'undo' }, { role: 'redo' }, { type: 'separator' }, { role: 'cut' }, { role: 'copy' }, { role: 'paste' }, { role: 'selectAll' }] },
     { label: '表示', submenu: [{ label: '個人', accelerator: 'CmdOrCtrl+1', click: () => action('space', 'personal') }, { label: '大学', accelerator: 'CmdOrCtrl+2', click: () => action('space', 'university') }, { label: '再読み込み', accelerator: 'CmdOrCtrl+R', click: () => action('reload') }, { type: 'separator' }, { role: 'togglefullscreen' }] },

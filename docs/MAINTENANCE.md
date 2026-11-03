@@ -5,6 +5,8 @@
 - `src/main.cjs`：ウィンドウ、スペース別セッション、タブ、メニュー、権限、保存と終了。
 - `src/core.cjs`：サービス一覧、URL境界、復元データの検証、WebContentsの設定。
 - `src/notifications.cjs`：通知の選択の保存・検証。`notifications.json`は利用者データなので公開しない。
+- `src/passwords.cjs`：MacのsafeStorage非同期APIによる暗号化保存。`passwords.enc.json`は利用者データなので公開しない。
+- `src/password-controller.cjs` / `src/password-fields.cjs`：信頼済みUI・ネイティブ候補メニュー・入力欄の照合。
 - `src/preload.cjs` / `src/ui/`：ローカル画面専用の操作窓口と表示。
 - `resources/Portio.svg`：アイコン原本。`npm run icon`で生成物を更新。
 - `scripts/package.cjs`：Apple Silicon向けアプリの作成とアドホック署名。
@@ -41,3 +43,11 @@ Electronの実装根拠：[macOS Keychain identity](https://github.com/electron/
 ## 通知の設定
 
 通知のみ、利用者が明示的に選んだ許可・ブロックを保存します。HTTPS（検証用のloopback HTTPを含む）の正規化したoriginとスペースで照合し、異なるoriginの埋め込みには流用しません。既存のカメラ・マイク・クリップボードの一時的な許可やmacOSの設定は変更しません。保存失敗時は許可せず案内し、リセットの失敗時も既存の選択を維持します。
+
+## パスワードの保存と入力
+
+保存は利用者が明示的に確認した場合のみ行い、origin（HTTPSまたは検証用のloopback HTTP）とスペースで分離します。MacのsafeStorage非同期APIを使い、ユーザー名・origin・パスワードを含む全体を暗号化して0600のファイルへ原子的に保存します。暗号化が使えない場合や破損時は保存・入力を行わず、平文に切り替えません。OSのKeychain許可は自動承認しません。
+
+外部ページには引き続きpreloadやIPCを与えません。実際のクリック／Tab操作を契機に、isolated world 1004で最上位フレームの入力欄だけを検査します。アカウント候補はネイティブメニューに表示し、選ばれた一件だけを入力します。入力前にタブ・スペース・フレーム・ナビゲーション世代・origin・入力欄・フォーム送信先を再照合し、自動送信はしません。外部ページへ保存一覧やパスワードを公開しません。アプリの一般状態にもパスワードを含めず、保存時の下書きだけを信頼済みUIへ一度返します。
+
+Chrome/iCloudとの同期・取り込み、iframe/shadow DOM、独自入力部品、パスキーや確認コードの自動化は対象外です。暗号化ファイルは同じMacアカウントの利用者から情報を隠す機能ではありません。鍵を失うと復号できないため、保存ファイルやKeychain名を安易に移動・変更しないでください。

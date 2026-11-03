@@ -17,6 +17,7 @@ When I asked ChatGPT to operate websites, separate browsers for my personal and 
 - Separate cookies and website storage for each space.
 - Service shortcuts, an address/search field and tabs. Add your own websites separately in each space.
 - Drag tabs to reorder them, preserving the current page and its input. Restore their order and selection after restarting; authentication callback URLs are excluded.
+- Save logins separately in each space. Click a login field and choose an account to fill its username and password.
 - Free to use. Third-party services may have their own fees.
 
 ## Use on a Mac
@@ -39,14 +40,23 @@ Drag a tab title left or right to change its position.
 
 Notification allow/block choices are remembered separately for each website origin and space. Open **「サイトの通知」** in the sidebar to review or reset a choice. Reload the site after resetting; its next notification request will ask again. If no choice is saved, Portio asks when the site first requests notifications. Camera, microphone and clipboard permissions are valid only until the app exits.
 
+## Save and fill passwords
+
+1. Enter your username and password on the site's login page, then open the key button at the top right or **「パスワード」** in the sidebar.
+2. Choose **「＋ このサイトのログインを保存」**, check the site and account, then press **「保存」**. Enter any missing fields in this dialog.
+3. Next time, click a login field and choose the saved account. Portio fills the fields without submitting the form.
+
+Saving is manual. For multi-step sign-in, select the same account in each step. Matching requires the exact origin (scheme, host and port) and space. Ordinary HTTPS login forms are supported; embedded frames and some custom forms are not. Verification codes and passkeys still require their usual actions. Delete unwanted entries from **「パスワード」**.
+
 ## Limits and privacy
 
 - Built with Electron and Chromium; it is not Google Chrome.
 - Google or university SSO may reject embedded browsers. Portio does not bypass those restrictions.
 - **No automatic updates.** Install a newer Portio build to receive browser security fixes.
-- No extensions, password manager or Chrome sync.
+- No extensions, Chrome sync or password import from Chrome/iCloud.
 - Spaces separate sign-ins; they do not hide data from another person using the same Mac account.
 - Websites communicate directly with their own services. Portio adds no analytics, ads or cloud sync.
+- Saved login credentials are encrypted locally using a key protected by the macOS Keychain. They are not synced to an external service.
 - Sign-in sessions, website storage, restored tabs, custom shortcuts and notification choices are saved locally on your Mac. Published source code does not include users' accounts, cookies or browsing history.
 
 See [validation and known limits](TESTING.md).

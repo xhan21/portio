@@ -17,14 +17,14 @@
     <div class="divider"></div>
     <div class="service-heading"><p class="section-label">すぐに開く</p><button id="shortcut-add" aria-label="すぐに開くに追加" title="すぐに開くに追加">＋ 追加</button></div>
     <nav id="services"></nav>
-    <div class="sidebar-bottom"><p id="space-status"></p><button id="notifications">サイトの通知</button><button id="help">使い方とログインについて</button><small><span id="version"></span></small></div>
+    <div class="sidebar-bottom"><p id="space-status"></p><button id="notifications">サイトの通知</button><button id="passwords">パスワード</button><button id="help">使い方とログインについて</button><small><span id="version"></span></small></div>
   </aside>
   <main>
     <header>
       <div class="tabbar"><div id="tabs" role="tablist" aria-label="開いているタブ"></div><button id="new" aria-label="新しいタブ" title="新しいタブ（⌘T）">＋</button></div>
       <div class="toolbar">
         <button id="back" aria-label="戻る" title="戻る">←</button><button id="forward" aria-label="進む" title="進む">→</button><button id="reload" aria-label="再読み込み" title="再読み込み">↻</button><button id="home" aria-label="スタート" title="スタート">⌂</button>
-        <form id="address-form"><input id="address" aria-label="アドレスと検索" placeholder="URLを入力、または検索" autocomplete="off" spellcheck="false"><span id="space-badge"></span></form>
+        <form id="address-form"><input id="address" aria-label="アドレスと検索" placeholder="URLを入力、または検索" autocomplete="off" spellcheck="false"><span id="space-badge"></span></form><button id="passwords-toolbar" aria-label="パスワード" title="ログイン情報を保存・管理">⚿</button>
       </div>
     </header>
     <div id="notice" hidden role="status"><span></span><button id="dismiss" aria-label="メッセージを閉じる">×</button></div>
@@ -48,6 +48,19 @@
     <div id="notification-list"></div>
     <p id="notification-error" role="alert"></p>
     <div class="dialog-actions"><span></span><button id="notifications-close" class="primary">閉じる</button></div>
+  </dialog>
+  <dialog id="password-dialog" aria-labelledby="password-title">
+    <h2 id="password-title">パスワード</h2><p id="password-space"></p>
+    <p class="password-hint">保存したサイトの入力欄をクリックすると、アカウントを選んで入力できます。<br>ログイン情報は、このMac内に暗号化して保存します。</p>
+    <p id="password-origin"></p><button id="password-add" class="password-add">＋ このサイトのログインを保存</button>
+    <form id="password-form" hidden autocomplete="off">
+      <label for="password-username">アカウント名・メールアドレス</label><input id="password-username" maxlength="320" required autocomplete="off" spellcheck="false">
+      <label for="password-secret">パスワード</label><input id="password-secret" type="password" maxlength="4096" required autocomplete="new-password">
+      <p class="password-hint">サイトとアカウント名を確認してから保存してください。</p>
+      <div class="dialog-actions"><span></span><button id="password-cancel" type="button">キャンセル</button><button id="password-save" class="primary" type="submit">保存</button></div>
+    </form>
+    <div id="password-list"></div><p id="password-error" role="alert"></p>
+    <div class="dialog-actions"><span></span><button id="passwords-close" class="primary">閉じる</button></div>
   </dialog>
 </body>
 </html>

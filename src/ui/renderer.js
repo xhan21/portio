@@ -1,5 +1,6 @@
 const $ = id => document.getElementById(id);
 const act = (kind, value) => window.duo.act(kind, value).catch(() => {});
+let passwordEditor = null, passwordListKey = '';
 let state, drawnServices = '', drawnNotifications = '', shownTab = '', drag = null, scrollFrame = 0, suppressClick = false;
 function el(tag, className, text) { const item = document.createElement(tag); item.className = className; if (text !== undefined) item.textContent = text; return item; }
 function drawTabs() {
@@ -46,7 +47,7 @@ function finishDrag(redraw = true) {
 }
 $('tabs').addEventListener('pointerdown', event => {
   const choose = event.target.closest('.tab-select');
-  if (!choose || event.button !== 0 || state.shortcutEditor || state.notificationSettings) return;
+  if (!choose || event.button !== 0 || state.shortcutEditor || state.notificationSettings || state.passwordSettings) return;
   drag = { id: choose.closest('.tab').dataset.id, space: state.active, ids: state.tabs.map(t => t.id).join(','), x: event.clientX, y: event.clientY, startX: event.clientX, startY: event.clientY, pointerId: event.pointerId, element: choose, started: false };
   choose.setPointerCapture(event.pointerId);
 });
@@ -81,7 +82,16 @@ $('shortcut-form').addEventListener('submit', event => {
   event.preventDefault(); act('shortcut-save', JSON.stringify({ name: $('shortcut-name').value, url: $('shortcut-url').value }));
 });
 document.querySelectorAll('[data-space]').forEach(button => button.addEventListener('click', () => act('space', button.dataset.space)));
-for (const id of ['new', 'back', 'forward', 'reload', 'home', 'help', 'dismiss', 'notifications', 'notifications-close']) $(id).addEventListener('click', () => act(id));
+for (const id of ['new', 'back', 'forward', 'reload', 'home', 'help', 'dismiss', 'notifications', 'notifications-close', 'passwords', 'passwords-close', 'password-cancel']) $(id).addEventListener('click', () => act(id));
+$('passwords-toolbar').onclick = () => act('passwords');
+$('password-dialog').addEventListener('cancel', event => { event.preventDefault(); act('passwords-close'); });
+$('password-add').onclick = async () => {
+  const draft = await act('password-add');
+  if (draft && state?.passwordSettings?.editor === draft.token) { $('password-username').value = draft.username; $('password-secret').value = draft.password; $('password-username').focus(); }
+};
+$('password-form').addEventListener('submit', event => {
+  event.preventDefault(); act('password-save', JSON.stringify({ token: passwordEditor, username: $('password-username').value, password: $('password-secret').value }));
+});
 $('address-form').addEventListener('submit', event => { event.preventDefault(); act('navigate', $('address').value); $('address').blur(); });
 window.duo.onFocusAddress(() => { $('address').focus(); $('address').select(); });
 window.duo.onState(next => {
@@ -103,7 +113,7 @@ window.duo.onState(next => {
   $('notice').hidden = !next.current?.error;
   $('notice').querySelector('span').textContent = next.current?.error || '';
   // Loading/title updates must not replace the element being dragged.
-  if (drag && (drag.space !== next.active || drag.ids !== next.tabs.map(t => t.id).join(',') || next.shortcutEditor || next.notificationSettings)) finishDrag();
+  if (drag && (drag.space !== next.active || drag.ids !== next.tabs.map(t => t.id).join(',') || next.shortcutEditor || next.notificationSettings || next.passwordSettings)) finishDrag();
   if (!drag) drawTabs();
   const serviceKey = JSON.stringify([next.active, next.services]);
   if (drawnServices !== serviceKey) {
@@ -127,6 +137,7 @@ window.duo.onState(next => {
       modal.showModal(); $('shortcut-name').focus();
     }
   } else if (modal.open) modal.close();
+  drawPasswords(next.passwordSettings);
   const settings = next.notificationSettings, notificationDialog = $('notification-dialog');
   if (settings) {
     $('notification-space').textContent = next.spaceName + '用スペース';
@@ -147,4 +158,35 @@ window.duo.onState(next => {
     if (!notificationDialog.open) notificationDialog.showModal();
   } else if (notificationDialog.open) notificationDialog.close();
 });
+function drawPasswords(settings) {
+  const modal = $('password-dialog');
+  if (!settings) {
+    if (modal.open) modal.close();
+    $('password-username').value = ''; $('password-secret').value = ''; passwordEditor = null; return;
+  }
+  $('password-space').textContent = state.spaceName + '用スペース';
+  $('password-origin').textContent = settings.origin ? '保存先：' + settings.origin : 'ログイン情報を追加するには、保存したいサイトを開いてください。';
+  $('password-error').textContent = settings.error || '';
+  $('password-add').disabled = !settings.origin || settings.busy;
+  $('password-add').hidden = !!settings.editor;
+  $('password-form').hidden = !settings.editor;
+  $('password-list').hidden = !!settings.editor;
+  for (const id of ['password-username', 'password-secret', 'password-save', 'password-cancel', 'passwords-close']) $(id).disabled = settings.busy;
+  if (passwordEditor !== settings.editor) {
+    passwordEditor = settings.editor; $('password-username').value = ''; $('password-secret').value = '';
+  }
+  const key = JSON.stringify([settings.space, settings.entries, settings.busy]);
+  if (passwordListKey !== key) {
+    passwordListKey = key;
+    $('password-list').replaceChildren(...settings.entries.map(entry => {
+      const row = el('div', 'notification-row'), description = el('div', 'notification-site');
+      description.append(el('strong', '', entry.origin), el('span', '', entry.username + '　••••••••'));
+      const remove = el('button', 'notification-reset', '削除'); remove.disabled = settings.busy;
+      remove.setAttribute('aria-label', entry.origin + 'の' + entry.username + 'を削除'); remove.onclick = () => act('password-remove', entry.id);
+      row.append(description, remove); return row;
+    }));
+    if (!settings.entries.length) $('password-list').append(el('p', 'notification-empty', settings.busy ? '読み込み中…' : '保存したログイン情報はありません。'));
+  }
+  if (!modal.open) modal.showModal();
+}
 act('state');
