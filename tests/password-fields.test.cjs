@@ -48,7 +48,7 @@ test('sign-up, OTP, hidden and cross-origin form targets are excluded', () => {
   }
 });
 test('navigation, removed/retyped fields and form-action swaps after selection reject filling', () => {
-  for (const change of ['origin', 'removed', 'password-type', 'action', 'hidden', 'otp', 'form']) {
+  for (const change of ['origin', 'removed', 'password-type', 'action', 'hidden', 'otp', 'form', 'route', 'focus', 'name', 'autocomplete']) {
     const p = page(); assert.ok(p.inspect());
     if (change === 'origin') p.location.origin = 'https://attacker.test';
     if (change === 'removed') p.pass.isConnected = false;
@@ -57,6 +57,10 @@ test('navigation, removed/retyped fields and form-action swaps after selection r
     if (change === 'hidden') p.pass.hidden = true;
     if (change === 'otp') p.user.autocomplete = 'one-time-code';
     if (change === 'form') p.user.form = null;
+    if (change === 'route') p.location.href = 'https://example.test/another-form';
+    if (change === 'focus') p.context.document.activeElement = p.pass;
+    if (change === 'name') p.pass.name = 'verification';
+    if (change === 'autocomplete') p.pass.autocomplete = 'new-password';
     assert.equal(p.fill(), false, change); assert.equal(p.user.value, ''); assert.equal(p.pass.value, '');
   }
 });

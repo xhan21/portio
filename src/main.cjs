@@ -1,4 +1,4 @@
-const { app, BrowserWindow, WebContentsView, session, ipcMain, Menu, dialog, safeStorage } = require('electron');
+const { app, BrowserWindow, WebContentsView, session, ipcMain, Menu, dialog, safeStorage, systemPreferences, powerMonitor } = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
@@ -6,7 +6,9 @@ const { randomUUID } = require('node:crypto');
 const { NotificationStore, notificationContext } = require('./notifications.cjs');
 const { PasswordStore } = require('./passwords.cjs');
 const { PasswordController } = require('./password-controller.cjs');
-const { SPACES, SERVICES, name, webURL, resolveAddress, restorable, readState, preferences, shortcutData, reorderTabs } = require('./core.cjs');
+const { touchIDAuthenticator } = require('./password-auth.cjs');
+const { PasswordPopup } = require('./password-popup.cjs');
+const { SPACES, SERVICES, name, webURL, resolveAddress, restorable, readState, preferences, shortcutData, reorderTabs, rememberSite, matchingSites } = require('./core.cjs');
 
 // Keep the original internal name: Chromium uses it for the cookie-encryption Keychain entry.
 app.setName('Duo Chromium');
@@ -20,10 +22,10 @@ const uiURL = pathToFileURL(uiFile).href;
 const stateFile = path.join(app.getPath('userData'), 'session.json');
 const notifications = new NotificationStore(path.join(app.getPath('userData'), 'notifications.json'));
 const pendingNotifications = new Map();
-const spaces = Object.fromEntries(SPACES.map(s => [s, { tabs: [], selected: null, shortcuts: [] }]));
+const spaces = Object.fromEntries(SPACES.map(s => [s, { tabs: [], selected: null, shortcuts: [], history: [] }]));
 const sessions = {};
 let win, active = 'personal', sequence = 0, saveTimer, closing = false, finishing = false;
-let shortcutEditor = null, passwordManager;
+let shortcutEditor = null, passwordManager, addressPopup;
 let notificationSettings = false, notificationError = '';
 const current = () => spaces[active].tabs.find(t => t.id === spaces[active].selected);
 const contents = t => t?.wc && !t.wc.isDestroyed() ? t.wc : null;
@@ -35,6 +37,7 @@ function snapshot() {
   return { version: 1, active, spaces: Object.fromEntries(SPACES.map(s => [s, {
     selected: Math.max(0, spaces[s].tabs.findIndex(t => t.id === spaces[s].selected)),
     shortcuts: spaces[s].shortcuts,
+    history: spaces[s].history,
     tabs: spaces[s].tabs.map(t => ({ url: restorable(t.url), service: t.service }))
   }])) };
 }
@@ -71,6 +74,7 @@ function layout() {
 }
 function update() { layout(); publish(); }
 function newTab(space, options = {}) {
+  passwordManager?.revoke();
   const t = { id: String(++sequence), space, title: 'スタート', url: '', service: options.service || null, loading: false, error: '', view: null, wc: null };
   spaces[space].tabs.push(t);
   spaces[space].selected = t.id;
@@ -83,7 +87,7 @@ function makeView(t, windowOptions = {}) {
   if (contents(t)) return;
   // Electron supplies an existing webContents for window.open. Adopt that exact
   // instance so the opener, redirects and OAuth response target remain connected.
-  t.view = new WebContentsView({ ...windowOptions, webPreferences: { ...windowOptions.webPreferences, ...preferences(partition(t.space)), session: sessions[t.space], preload: undefined } });
+  t.view = new WebContentsView({ ...windowOptions, webPreferences: { ...windowOptions.webPreferences, ...preferences(partition(t.space)), session: sessions[t.space], preload: path.join(__dirname, 'login-preload.cjs') } });
   t.view.setBackgroundColor('#ffffff');
   const wc = t.view.webContents;
   t.wc = wc;
@@ -91,10 +95,11 @@ function makeView(t, windowOptions = {}) {
   win.contentView.addChildView(t.view);
   const refreshURL = () => { t.url = wc.getURL(); t.error = ''; update(); };
   wc.on('did-start-loading', () => { t.loading = true; update(); });
-  wc.on('did-stop-loading', () => { t.loading = false; update(); });
+  wc.on('did-stop-loading', () => { t.loading = false; if (!t.error) spaces[t.space].history = rememberSite(spaces[t.space].history, wc.getURL(), t.title); update(); });
   wc.on('did-navigate', refreshURL);
   wc.on('did-navigate-in-page', (_e, _url, main) => { if (main) refreshURL(); });
-  wc.on('page-title-updated', (_e, title) => { t.title = title || 'ページ'; publish(); });
+  wc.on('page-title-updated', (_e, title) => { t.title = title || 'ページ'; if (!t.loading && !t.error) spaces[t.space].history = rememberSite(spaces[t.space].history, wc.getURL(), t.title); publish(); });
+  wc.on('before-mouse-event', () => addressPopup?.hide());
   wc.on('did-fail-load', (_e, code, _description, _url, main) => {
     if (main && code !== -3) { t.error = `ページを開けませんでした（${code}）。アドレスと通信状態を確認してください。`; t.loading = false; update(); }
   });
@@ -106,7 +111,7 @@ function makeView(t, windowOptions = {}) {
   wc.on('will-frame-navigate', event => { if (/^(file|javascript|devtools|chrome):/i.test(event.url)) event.preventDefault(); });
   wc.setWindowOpenHandler(({ url }) => {
     if (!allowed(url)) return { action: 'deny' };
-    return { action: 'allow', overrideBrowserWindowOptions: { webPreferences: preferences(partition(t.space)) }, createWindow: options => {
+    return { action: 'allow', overrideBrowserWindowOptions: { webPreferences: { ...preferences(partition(t.space)), preload: path.join(__dirname, 'login-preload.cjs') } }, createWindow: options => {
       const popup = newTab(t.space, { windowOptions: options });
       active = t.space; update();
       return popup.view.webContents;
@@ -213,18 +218,36 @@ function setupSession(space) {
   });
 }
 function help() {
-  dialog.showMessageBox(win, { title: 'Portioの使い方', message: '個人と大学、ふたつの作業場所。', detail: `左側でスペースを選び、最初にそれぞれのアカウントでログインしてください。Canvaなどのログイン状態はスペースごとに保存します。\n\n「すぐに開く」の「＋ 追加」から、名前とURLを登録できます。追加した項目の「…」で編集・削除できます。タブのタイトルを左右にドラッグすると順番を変えられます。\n\nログイン情報は、右上の鍵ボタン→「＋ このサイトのログインを保存」で確認して保存できます。次回は入力欄をクリックし、アカウントを選ぶと入力されます。保存情報はこのMac内で暗号化し、サイト・スペースごとに分けます。\n\nChromeやSafariとは別にログインしてください。Google・大学の認証方式によっては、このアプリからログインできない場合があります。\n\nPortio自体の月額料金はありません。この試作版にブラウザの自動更新はありません。更新版への入れ替えが必要です。\n\nPortio ${app.getVersion()} / Chromium ${process.versions.chrome}` });
+  dialog.showMessageBox(win, { title: 'Portioの使い方', message: '個人と大学、ふたつの作業場所。', detail: `左側でスペースを選び、最初にそれぞれのアカウントでログインしてください。Canvaなどのログイン状態はスペースごとに保存します。\n\n「すぐに開く」の「＋ 追加」から、名前とURLを登録できます。追加した項目の「…」で編集・削除できます。タブのタイトルを左右にドラッグすると順番を変えられます。\n\nログイン操作をすると、Portioから保存するか確認します。案内が出ない場合は、右上の鍵ボタン→「＋ このサイトのログインを保存」から保存できます。次回は入力欄をクリックし、アカウントを選んでTouch IDで本人確認すると入力されます。Touch IDが利用できない場合は、サイトへ手入力してください。保存情報はこのMac内で暗号化し、サイト・スペースごとに分けます。\n\nアドレス欄でサイトの名前やURLを入力すると、このスペースで開いたサイトが候補に出ます。履歴は各スペース200件までで、サイドバーから消去できます。\n\nChromeやSafariとは別にログインしてください。Google・大学の認証方式によっては、このアプリからログインできない場合があります。\n\nPortio自体の月額料金はありません。この試作版にブラウザの自動更新はありません。更新版への入れ替えが必要です。\n\nPortio ${app.getVersion()} / Chromium ${process.versions.chrome}` });
 }
-function focusAddress() { win.webContents.focus(); win.webContents.send('duo:focus-address'); }
+function focusAddress() { passwordManager?.revoke(); win.webContents.focus(); win.webContents.send('duo:focus-address'); }
 function action(kind, value) {
   if (passwordManager?.settings && !['state', 'passwords-close', 'password-add', 'password-save', 'password-cancel', 'password-remove'].includes(kind)) return;
   if (shortcutEditor && !['state', 'shortcut-save', 'shortcut-remove', 'shortcut-cancel', 'help'].includes(kind)) return;
   if (notificationSettings && !['state', 'notifications-reset', 'notifications-close', 'help'].includes(kind)) return;
   const t = current(), wc = contents(t);
+  if (!['state', 'address-suggest'].includes(kind)) addressPopup?.hide();
   if (kind === 'passwords' || kind.startsWith('password-') || kind === 'passwords-close') return passwordManager?.act(kind, value);
-  if (kind !== 'state') passwordManager?.cancelMenu();
+  if (kind !== 'state') passwordManager?.revoke();
   switch (kind) {
     case 'state': publish(); break;
+    case 'address-suggest': {
+      const data = command(value), rect = data?.rect;
+      if (!rect || !['x', 'y', 'width', 'height'].every(k => Number.isFinite(rect[k])) || typeof data.query !== 'string') break;
+      const entries = matchingSites(spaces[active].history, data.query), selectedSpace = active;
+      if (!entries.length) { addressPopup.hide(); break; }
+      void addressPopup.show({ items: entries.map(entry => ({ id: entry.url, username: entry.title || entry.url, detail: entry.url })), origin: `${name(active)} · アクセスしたサイト`, rect, viewBounds: { x: 0, y: 0 }, source: win.webContents, onChoose: url => {
+        if (active !== selectedSpace || current() !== t || !entries.some(entry => entry.url === url)) return;
+        win.webContents.send('duo:address-chosen', url); load(t, url);
+      } });
+      break;
+    }
+    case 'address-hide': break;
+    case 'history-clear': {
+      const space = active;
+      void dialog.showMessageBox(win, { type: 'question', message: `${name(space)}用のアクセス履歴を消去しますか？`, detail: 'アドレス欄の候補に使う履歴を消去します。ログイン状態や保存したパスワードは残ります。', buttons: ['キャンセル', '消去する'], defaultId: 0, cancelId: 0 }).then(result => { if (result.response === 1) { spaces[space].history = []; if (win && !win.isDestroyed()) publish(); } });
+      break;
+    }
     case 'notifications': notificationSettings = true; notificationError = ''; update(); break;
     case 'notifications-close': notificationSettings = false; update(); break;
     case 'notifications-reset': {
@@ -293,6 +316,7 @@ async function finishClose() {
   finishing = true;
   try { await Promise.race([Promise.all(Object.values(sessions).map(s => s.cookies.flushStore())), new Promise(resolve => setTimeout(resolve, 3000))]); } catch { /* OS also persists the partition. */ }
   for (const s of Object.values(sessions)) s.flushStorageData();
+  passwordManager.popup.destroy(); addressPopup.destroy();
   win.destroy(); win = null; app.quit();
 }
 function start() {
@@ -303,9 +327,13 @@ function start() {
     copyright: 'Copyright © 2026 Xu Han',
     credits: 'MIT License\nhttps://github.com/xhan21/portio'
   });
-  passwordManager = new PasswordController({ store: new PasswordStore(path.join(app.getPath('userData'), 'passwords.enc.json'), process.platform === 'darwin' ? safeStorage : null), Menu, dialog, current, window: () => win, space: () => active, canSuggest: () => !closing && !shortcutEditor && !notificationSettings, changed: update });
+  passwordManager = new PasswordController({ store: new PasswordStore(path.join(app.getPath('userData'), 'passwords.enc.json'), process.platform === 'darwin' ? safeStorage : null), Menu, popup: new PasswordPopup({ WebContentsView, parent: () => win }), dialog, current, window: () => win, space: () => active, canSuggest: () => !closing && !shortcutEditor && !notificationSettings, changed: update, authenticate: touchIDAuthenticator({ systemPreferences, dialog, window: () => win }) });
+  addressPopup = new PasswordPopup({ WebContentsView, parent: () => win });
+  for (const event of ['lock-screen', 'suspend', 'user-did-resign-active']) powerMonitor.on(event, () => { passwordManager.revoke(); addressPopup.hide(); });
   SPACES.forEach(setupSession);
   win = new BrowserWindow({ width: 1240, height: 820, minWidth: 960, minHeight: 640, title: 'Portio', titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 22, y: 20 }, backgroundColor: '#f8faf9', show: false, webPreferences: { ...preferences('duo-ui'), preload: path.join(__dirname, 'preload.cjs') } });
+  for (const event of ['move', 'resize', 'blur']) win.on(event, () => { passwordManager.cancelMenu(); addressPopup.hide(); });
+  win.webContents.on('before-input-event', (event, input) => { if (addressPopup.key(input)) event.preventDefault(); });
   win.webContents.on('will-navigate', event => event.preventDefault());
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   win.webContents.on('did-finish-load', update);
@@ -315,7 +343,7 @@ function start() {
     if (finishing) return;
     event.preventDefault();
     if (closing) return;
-    saveNow(); closing = true;
+    passwordManager.revoke(); addressPopup.hide(); saveNow(); closing = true;
     for (const s of SPACES) for (const t of spaces[s].tabs) { if (!closing) return; contents(t)?.close({ waitForBeforeUnload: true }); }
     finishClose();
   });
@@ -324,6 +352,7 @@ function start() {
   active = saved.active;
   for (const s of SPACES) {
     spaces[s].shortcuts = saved.spaces[s].shortcuts;
+    spaces[s].history = saved.spaces[s].history;
     const restored = saved.spaces[s].tabs.map(t => newTab(s, t));
     spaces[s].selected = restored[saved.spaces[s].selected].id;
   }

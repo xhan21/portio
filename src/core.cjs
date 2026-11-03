@@ -44,7 +44,7 @@ function readState(value) {
     }
     const services = [...SERVICES.filter(s => space === 'university' || s.id !== 'classroom'), ...shortcuts];
     const tabs = Array.isArray(raw?.tabs) ? raw.tabs.slice(0, 20).map(t => ({ url: restorable(t?.url), service: services.some(s => s.id === t?.service) ? t.service : null })) : [];
-    result.spaces[space] = { shortcuts, tabs: tabs.length ? tabs : [{ url: null, service: null }], selected: Number.isInteger(raw?.selected) ? Math.max(0, Math.min(raw.selected, Math.max(0, tabs.length - 1))) : 0 };
+    result.spaces[space] = { shortcuts, history: readHistory(raw?.history), tabs: tabs.length ? tabs : [{ url: null, service: null }], selected: Number.isInteger(raw?.selected) ? Math.max(0, Math.min(raw.selected, Math.max(0, tabs.length - 1))) : 0 };
   }
   return result;
 }
@@ -66,4 +66,27 @@ function reorderTabs(tabs, id, beforeId) {
 function preferences(partition) {
   return { partition, sandbox: true, contextIsolation: true, nodeIntegration: false, nodeIntegrationInWorker: false, nodeIntegrationInSubFrames: false, webSecurity: true, allowRunningInsecureContent: false, webviewTag: false, safeDialogs: true, navigateOnDragDrop: false };
 }
-module.exports = { SPACES, SERVICES, name, webURL, resolveAddress, restorable, readState, preferences, shortcutData, reorderTabs };
+function historyURL(value) {
+  const safe = typeof value === 'string' && value.length <= 2048 && restorable(value);
+  if (!safe) return null;
+  const url = new URL(safe); url.search = ''; url.hash = ''; return url.href;
+}
+function readHistory(value) {
+  const result = [], seen = new Set();
+  for (const item of Array.isArray(value) ? value.slice(0, 200) : []) {
+    const url = historyURL(item?.url);
+    if (!url || seen.has(url)) continue;
+    seen.add(url); result.push({ url, title: typeof item.title === 'string' ? item.title.replace(/[\r\n\0]/g, ' ').slice(0, 160) : new URL(url).hostname });
+  }
+  return result;
+}
+function rememberSite(history, url, title) {
+  const entry = readHistory([{ url, title }])[0];
+  return entry ? [entry, ...history.filter(item => item.url !== entry.url)].slice(0, 200) : history;
+}
+function matchingSites(history, query) {
+  if (typeof query !== 'string' || !query.trim() || query.length > 2048) return [];
+  const text = query.trim().toLocaleLowerCase();
+  return history.filter(item => (item.title + ' ' + item.url).toLocaleLowerCase().includes(text)).slice(0, 6);
+}
+module.exports = { SPACES, SERVICES, name, webURL, resolveAddress, restorable, readState, preferences, shortcutData, reorderTabs, historyURL, readHistory, rememberSite, matchingSites };

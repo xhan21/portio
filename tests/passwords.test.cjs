@@ -49,6 +49,9 @@ test('vault serializes concurrent changes and updates an account without duplica
   assert.equal(await store.save('personal', 'https://example.test', 'b', 'replacement'), original.id);
   assert.equal((await store.list('personal')).length, 3);
   assert.equal((await store.get('personal', 'https://example.test', original.id)).password, 'replacement');
+  assert.equal(await store.compare('personal', 'https://example.test', 'b', 'replacement'), 'same');
+  assert.equal(await store.compare('personal', 'https://example.test', 'b', 'another'), 'changed');
+  assert.equal(await store.compare('university', 'https://example.test', 'b', 'replacement'), 'new');
 });
 test('vault refuses insecure/malformed inputs and an unavailable keychain without plaintext fallback', async t => {
   const { file, encryption } = environment(t), store = new PasswordStore(file, encryption);
@@ -82,7 +85,7 @@ function controller() {
   const wc = { isDestroyed: () => false, isLoadingMainFrame: () => false, getURL: () => url, mainFrame: {}, isFocused: () => true, focus() {}, executeJavaScriptInIsolatedWorld: async (...args) => calls.push(args) };
   const tab = { wc, space: 'personal', error: '' }; selected = tab;
   const store = { get: async () => ({ username: 'synthetic-user', password: 'synthetic-secret' }) };
-  const manager = new PasswordController({ store, Menu: {}, dialog: {}, current: () => selected, window: () => ({}), space: () => 'personal', canSuggest: () => true, changed() {} });
+  const manager = new PasswordController({ store, Menu: {}, dialog: {}, current: () => selected, window: () => ({}), space: () => 'personal', canSuggest: () => true, changed() {}, authenticate: async () => true });
   return { manager, tab, store, calls, navigate: v => { url = v; }, select: v => { selected = v; } };
 }
 test('autofill rechecks navigation and tab identity after asynchronous secret retrieval', async () => {
@@ -107,4 +110,69 @@ test('a selected account is sent only into an isolated world and never submitted
   const code = test.calls[0][1][0].code;
   assert.equal(code.includes('synthetic-secret'), true);
   assert.equal(code.includes('.submit('), false);
+});
+
+test('autofill never reads a selected secret or fills after failed, cancelled or absent authentication', async () => {
+  for (const outcome of [false, undefined, null, 'true', new Error('OS authentication cancelled')]) {
+    const test = controller(); let reads = 0;
+    test.store.get = async () => { reads++; return { username: 'x', password: 'secret' }; };
+    test.manager.authenticate = async () => { if (outcome instanceof Error) throw outcome; return outcome; };
+    await test.manager.fill(test.manager.contextFor(), { ticket: 'ticket' }, 'id');
+    assert.equal(reads, 0); assert.equal(test.calls.length, 0); assert.equal(test.manager.authenticating, false);
+  }
+  const test = controller();
+  const manager = new PasswordController({ current: () => test.tab, space: () => 'personal', canSuggest: () => true, store: { get() { assert.fail('Missing authentication must deny'); } } });
+  await manager.fill(manager.contextFor(), { ticket: 'ticket' }, 'id');
+});
+
+test('one fresh authentication is required per fill; simultaneous selections cannot reuse a pending approval', async () => {
+  const test = controller(); let approve, prompts = 0, reads = 0;
+  test.manager.authenticate = () => { prompts++; return new Promise(resolve => { approve = resolve; }); };
+  test.store.get = async () => { reads++; return { username: 'synthetic', password: 'test' }; };
+  const first = test.manager.fill(test.manager.contextFor(), { ticket: 'first' }, 'id');
+  await test.manager.fill(test.manager.contextFor(), { ticket: 'second' }, 'id');
+  assert.equal(prompts, 1); assert.equal(reads, 0); approve(true); await first;
+  assert.equal(reads, 1); assert.equal(test.calls.length, 1);
+  const next = test.manager.fill(test.manager.contextFor(), { ticket: 'third' }, 'id');
+  assert.equal(prompts, 2); approve(false); await next;
+  assert.equal(reads, 1); assert.equal(test.calls.length, 1);
+});
+
+test('navigation, a tab round trip, screen lock or a settings dialog during authentication abort the pending fill', async () => {
+  for (const change of ['origin', 'document', 'tab-roundtrip', 'lock', 'settings']) {
+    const test = controller(); let approve, reads = 0;
+    test.manager.authenticate = () => new Promise(resolve => { approve = resolve; });
+    test.store.get = async () => { reads++; return { username: 'synthetic', password: 'test' }; };
+    const pending = test.manager.fill(test.manager.contextFor(), { ticket: 'ticket' }, 'id');
+    if (change === 'origin') test.navigate('https://other.test');
+    if (change === 'document') test.manager.invalidate(test.tab);
+    if (change === 'tab-roundtrip') { test.select(null); test.manager.revoke(); test.select(test.tab); }
+    if (change === 'lock') test.manager.revoke();
+    if (change === 'settings') test.manager.settings = {};
+    approve(true); await pending;
+    assert.equal(reads, 0, change); assert.equal(test.calls.length, 0, change);
+  }
+});
+
+test('authentication cancellation or lock preserves an existing saved password and prevents deletion', async () => {
+  for (const kind of ['password-save', 'password-remove']) for (const outcome of ['cancel', 'lock', 'approve']) {
+    const test = controller(); let writes = 0, deletes = 0;
+    const entry = { id: 'id', origin: 'https://example.test', username: 'synthetic' };
+    test.manager.settings = { space: 'personal', origin: entry.origin, entries: [entry], editor: 'editor', busy: false, error: '' };
+    test.manager.context = test.manager.contextFor();
+    test.manager.dialog = { showMessageBox: async () => ({ response: 1 }) };
+    test.manager.authenticate = async () => { if (outcome === 'lock') test.manager.revoke(); return outcome !== 'cancel'; };
+    Object.assign(test.store, { save: async () => { writes++; }, remove: async () => { deletes++; }, list: async () => [entry] });
+    await test.manager.act(kind, kind === 'password-save' ? JSON.stringify({ token: 'editor', username: 'synthetic', password: 'test-only' }) : 'id');
+    assert.equal(writes + deletes, outcome === 'approve' ? 1 : 0, kind + outcome);
+    assert.equal(test.manager.settings.busy, false);
+  }
+});
+test('typing an account prefix filters local suggestions without sending secrets or stealing focus', async () => {
+  const f = controller(), shown = [];
+  f.manager.popup = { show: async data => shown.push(data), hide() {} }; f.tab.view = { getBounds: () => ({ x: 224, y: 96 }) };
+  f.store.list = async () => [{ id: '1', username: 'alice@example.test' }, { id: '2', username: 'bob@example.test' }];
+  f.manager.inspect = async () => ({ kind: 'username', prefix: 'Al', rect: { x: 10, y: 20, width: 200, height: 30 } });
+  await f.manager.suggest(f.tab);
+  assert.deepEqual(shown[0].items.map(e => e.username), ['alice@example.test']); assert.equal(f.calls.length, 0);
 });

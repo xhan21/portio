@@ -23,18 +23,22 @@ function inspectFields(ticket, capture = false) {
   if (!pass && !looksLikeUsername) return null;
   const form = target.form;
   if (form && new URL(form.action || location.href, location.href).origin !== location.origin) return null;
-  globalThis.__portioPasswordTarget = { ticket, target, user, pass, form, action: form?.action, origin: location.origin };
-  return { ticket, origin: location.origin, kind: target.type === 'password' ? 'password' : 'username',
+  const signature = e => e ? JSON.stringify([e.type, e.name, e.id, e.autocomplete]) : null;
+  globalThis.__portioPasswordTarget = { ticket, target, user, pass, form, action: form?.action, origin: location.origin, href: location.href, userSignature: signature(user), passSignature: signature(pass) };
+  const rect = target.getBoundingClientRect();
+  return { ticket, origin: location.origin, kind: target.type === 'password' ? 'password' : 'username', prefix: target.type === 'password' ? '' : target.value.slice(0, 320), rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
     ...(capture ? { username: user && user.value.length <= 320 ? user.value : '', password: pass && pass.value.length <= 4096 ? pass.value : '' } : {}) };
 }
 function fillFields(payload) {
   const saved = globalThis.__portioPasswordTarget;
   delete globalThis.__portioPasswordTarget;
-  if (!saved || saved.ticket !== payload.ticket || saved.origin !== payload.origin || location.origin !== payload.origin) return false;
+  if (!saved || saved.ticket !== payload.ticket || saved.origin !== payload.origin || location.origin !== payload.origin || location.href !== saved.href || document.activeElement !== saved.target) return false;
   const usable = e => e instanceof HTMLInputElement && e.isConnected && !e.disabled && !e.readOnly && e.getClientRects().length && getComputedStyle(e).visibility === 'visible' && getComputedStyle(e).display !== 'none' && Number(getComputedStyle(e).opacity) > 0 && e.getBoundingClientRect().width > 8 && e.getBoundingClientRect().height > 8;
   if (!usable(saved.target) || saved.target.form !== saved.form || saved.form?.action !== saved.action) return false;
   if (saved.form && new URL(saved.form.action || location.href, location.href).origin !== payload.origin) return false;
-  const excluded = e => /(?:^|\s)(?:new-password|one-time-code)(?:\s|$)/i.test(e.autocomplete);
+  const excluded = e => /(?:^|\s)(?:new-password|one-time-code)(?:\s|$)/i.test(e.autocomplete) || /(?:otp|verification|one.?time|search)/i.test(e.name + ' ' + e.id);
+  const signature = e => e ? JSON.stringify([e.type, e.name, e.id, e.autocomplete]) : null;
+  if (signature(saved.user) !== saved.userSignature || signature(saved.pass) !== saved.passSignature) return false;
   if (saved.user && (!usable(saved.user) || !['text', 'email', 'tel'].includes(saved.user.type) || saved.user.form !== saved.form || excluded(saved.user))) return false;
   if (saved.pass && (!usable(saved.pass) || saved.pass.type !== 'password' || saved.pass.form !== saved.form || excluded(saved.pass))) return false;
   const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;

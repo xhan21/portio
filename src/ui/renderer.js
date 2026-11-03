@@ -93,6 +93,15 @@ $('password-form').addEventListener('submit', event => {
   event.preventDefault(); act('password-save', JSON.stringify({ token: passwordEditor, username: $('password-username').value, password: $('password-secret').value }));
 });
 $('address-form').addEventListener('submit', event => { event.preventDefault(); act('navigate', $('address').value); $('address').blur(); });
+function addressSuggestions() {
+  const rect = $('address').getBoundingClientRect();
+  act('address-suggest', JSON.stringify({ query: $('address').value, rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height } }));
+}
+$('address').addEventListener('input', event => { if (!event.isComposing) addressSuggestions(); });
+$('address').addEventListener('compositionend', addressSuggestions);
+document.addEventListener('pointerdown', event => { if (event.target !== $('address')) act('address-hide'); });
+$('history-clear').onclick = () => act('history-clear');
+window.duo.onAddressChosen(url => { $('address').value = url; $('address').blur(); });
 window.duo.onFocusAddress(() => { $('address').focus(); $('address').select(); });
 window.duo.onState(next => {
   state = next;

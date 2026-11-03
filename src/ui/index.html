@@ -17,7 +17,7 @@
     <div class="divider"></div>
     <div class="service-heading"><p class="section-label">すぐに開く</p><button id="shortcut-add" aria-label="すぐに開くに追加" title="すぐに開くに追加">＋ 追加</button></div>
     <nav id="services"></nav>
-    <div class="sidebar-bottom"><p id="space-status"></p><button id="notifications">サイトの通知</button><button id="passwords">パスワード</button><button id="help">使い方とログインについて</button><small><span id="version"></span></small></div>
+    <div class="sidebar-bottom"><p id="space-status"></p><button id="notifications">サイトの通知</button><button id="passwords">パスワード</button><button id="history-clear">このスペースのアクセス履歴を消去</button><button id="help">使い方とログインについて</button><small><span id="version"></span></small></div>
   </aside>
   <main>
     <header>
@@ -51,7 +51,7 @@
   </dialog>
   <dialog id="password-dialog" aria-labelledby="password-title">
     <h2 id="password-title">パスワード</h2><p id="password-space"></p>
-    <p class="password-hint">保存したサイトの入力欄をクリックすると、アカウントを選んで入力できます。<br>ログイン情報は、このMac内に暗号化して保存します。</p>
+    <p class="password-hint">保存したサイトの入力欄をクリックし、アカウントを選んでTouch IDで本人確認すると入力されます。<br>ログイン情報は、このMac内に暗号化して保存します。更新・削除にもTouch IDが必要です。</p>
     <p id="password-origin"></p><button id="password-add" class="password-add">＋ このサイトのログインを保存</button>
     <form id="password-form" hidden autocomplete="off">
       <label for="password-username">アカウント名・メールアドレス</label><input id="password-username" maxlength="320" required autocomplete="off" spellcheck="false">

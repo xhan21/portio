@@ -76,6 +76,12 @@ class PasswordStore {
       return e ? { ...e } : null;
     });
   }
+  compare(space, origin, username, password) {
+    return this.run(async () => {
+      const entry = (await this.read()).find(e => e.space === space && e.origin === origin && e.username === username);
+      return !entry ? 'new' : entry.password === password ? 'same' : 'changed';
+    });
+  }
   save(space, origin, username, password) {
     return this.run(async () => {
       const entry = { id: randomUUID(), space, origin, username: typeof username === 'string' ? username.trim() : username, password };

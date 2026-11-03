@@ -17,7 +17,7 @@ When I asked ChatGPT to operate websites, separate browsers for my personal and 
 - Separate cookies and website storage for each space.
 - Service shortcuts, an address/search field and tabs. Add your own websites separately in each space.
 - Drag tabs to reorder them, preserving the current page and its input. Restore their order and selection after restarting; authentication callback URLs are excluded.
-- Save logins separately in each space. Click a login field and choose an account to fill its username and password.
+- Save logins separately in each space. Click a login field and choose an account, then verify with Touch ID to fill its username and password.
 - Free to use. Third-party services may have their own fees.
 
 ## Use on a Mac
@@ -42,11 +42,15 @@ Notification allow/block choices are remembered separately for each website orig
 
 ## Save and fill passwords
 
-1. Enter your username and password on the site's login page, then open the key button at the top right or **「パスワード」** in the sidebar.
-2. Choose **「＋ このサイトのログインを保存」**, check the site and account, then press **「保存」**. Enter any missing fields in this dialog.
-3. Next time, click a login field and choose the saved account. Portio fills the fields without submitting the form.
+1. Enter your username and password, then attempt to sign in.
+2. Portio asks whether to save the login. Check the site, account and entered information, then choose **「保存する」**. Identical saved credentials do not trigger another prompt.
+3. Next time, click a login field, choose the saved account and verify with **Touch ID**. Portio fills the fields without submitting the form.
 
-Saving is manual. For multi-step sign-in, select the same account in each step. Matching requires the exact origin (scheme, host and port) and space. Ordinary HTTPS login forms are supported; embedded frames and some custom forms are not. Verification codes and passkeys still require their usual actions. Delete unwanted entries from **「パスワード」**.
+Each fill, update of an existing entry, and deletion requires a fresh Touch ID check. Cancellation, failure or unavailable Touch ID stops the operation. Macs without configured Touch ID cannot use saved-logins filling; manual site entry remains available.
+
+If a site does not trigger the prompt, use the key button and **「＋ このサイトのログインを保存」**. The prompt detects a sign-in attempt; it does not verify successful authentication. For multi-step sign-in, select the same account in each step. Matching requires the exact origin (scheme, host and port) and space. Ordinary HTTPS login forms are supported; embedded frames and some custom forms are not. Verification codes and passkeys still require their usual actions. Delete unwanted entries from **「パスワード」**.
+
+Type part of a previously visited site's title or URL in the address bar to see suggestions. Click a candidate, or use arrow keys and Enter. Each space keeps up to 200 recent sites locally across restarts; the sidebar can clear that space's history. Authentication pages, query strings and URL fragments are excluded from this candidate history. Typed prefixes are not sent to a search service.
 
 ## Limits and privacy
 
@@ -54,10 +58,11 @@ Saving is manual. For multi-step sign-in, select the same account in each step. 
 - Google or university SSO may reject embedded browsers. Portio does not bypass those restrictions.
 - **No automatic updates.** Install a newer Portio build to receive browser security fixes.
 - No extensions, Chrome sync or password import from Chrome/iCloud.
+- Touch ID guards the saved-login operation, not already signed-in tabs or passwords after they reach the website. No independent security audit has been performed. See the [review and remaining limits](docs/SECURITY-REVIEW.md).
 - Spaces separate sign-ins; they do not hide data from another person using the same Mac account.
 - Websites communicate directly with their own services. Portio adds no analytics, ads or cloud sync.
 - Saved login credentials are encrypted locally using a key protected by the macOS Keychain. They are not synced to an external service.
-- Sign-in sessions, website storage, restored tabs, custom shortcuts and notification choices are saved locally on your Mac. Published source code does not include users' accounts, cookies or browsing history.
+- Sign-in sessions, website storage, restored tabs, custom shortcuts, notification choices and address-bar history are saved locally on your Mac. Published source code does not include users' accounts, cookies or browsing history.
 
 See [validation and known limits](TESTING.md).
 
