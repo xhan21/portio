@@ -108,7 +108,6 @@ window.duo.onState(next => {
   $('version').textContent = 'Portio ' + next.version;
   document.body.classList.toggle('university', next.active === 'university');
   document.querySelectorAll('[data-space]').forEach(b => { b.classList.toggle('active', b.dataset.space === next.active); b.setAttribute('aria-pressed', String(b.dataset.space === next.active)); });
-  $('space-status').textContent = next.spaceName + '用スペースを表示中';
   $('space-badge').textContent = next.spaceName;
   $('eyebrow').textContent = next.active === 'personal' ? 'PERSONAL SPACE' : 'UNIVERSITY SPACE';
   $('greeting').textContent = next.spaceName + 'の作業を始めましょう。';
