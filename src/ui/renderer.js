@@ -4,13 +4,7 @@ let passwordEditor = null, passwordListKey = '';
 let state, drawnServices = '', drawnNotifications = '', shownTab = '', drag = null, scrollFrame = 0, suppressClick = false;
 function el(tag, className, text) { const item = document.createElement(tag); item.className = className; if (text !== undefined) item.textContent = text; return item; }
 function drawTabs() {
-  $('tabs').replaceChildren(...state.tabs.map(t => {
-    const tab = el('div', 'tab' + (t.selected ? ' selected' : '')); tab.dataset.id = t.id;
-    const choose = el('button', 'tab-select', (t.loading ? '◌ ' : '') + t.title);
-    choose.title = t.title + '\nドラッグして並べ替え'; choose.setAttribute('role', 'tab'); choose.setAttribute('aria-selected', String(t.selected)); choose.onclick = () => act('select', t.id);
-    const close = el('button', 'tab-close', '×'); close.setAttribute('aria-label', t.title + 'を閉じる'); close.onclick = () => act('close', t.id);
-    tab.append(choose, close); return tab;
-  }));
+  reconcileTabs($('tabs'), state.tabs, act);
   const selected = state.active + ':' + state.tabs.find(t => t.selected)?.id;
   if (selected !== shownTab) {
     shownTab = selected;

@@ -9,7 +9,7 @@ class PasswordPopup {
     const file = path.join(__dirname, 'ui', 'password-popup.html');
     const url = pathToFileURL(file).href;
     this.view = new this.WebContentsView({ webPreferences: { partition: 'duo-password-popup', preload: path.join(__dirname, 'password-popup-preload.cjs'), sandbox: true, contextIsolation: true, nodeIntegration: false, webSecurity: true } });
-    this.view.setVisible(false); this.parent().contentView.addChildView(this.view);
+    this.view.setVisible(false);
     this.view.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
     this.view.webContents.on('will-navigate', e => e.preventDefault());
     this.view.webContents.on('ipc-message', (event, channel, payload) => {
@@ -32,7 +32,9 @@ class PasswordPopup {
     if (y + height > parent.y + parent.height) y = Math.max(parent.y, parent.y + viewBounds.y + rect.y - height - 4);
     this.view.setBounds({ x, y: Math.round(y), width, height });
     this.view.webContents.send('duo:password-candidates', { serial, origin, usernames: items.map(e => e.username), details: items.map(e => e.detail || ''), selected: -1 });
-    this.parent().contentView.addChildView(this.view); this.view.setVisible(true);
+    const contentView = this.parent().contentView;
+    if (!contentView.children.includes(this.view)) contentView.addChildView(this.view);
+    this.view.setVisible(true);
     if (source && !source.isDestroyed()) source.focus();
   }
   choose(index) {
@@ -55,6 +57,7 @@ class PasswordPopup {
     if (this.view && !this.view.webContents.isDestroyed()) {
       this.view.webContents.send('duo:password-candidates', { serial: this.serial, origin: '', usernames: [], details: [] });
       this.view.setVisible(false);
+      this.parent().contentView.removeChildView(this.view);
     }
   }
   destroy() { this.hide(); this.view?.webContents.close(); }

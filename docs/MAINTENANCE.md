@@ -3,6 +3,8 @@
 ## 構成
 
 - `src/main.cjs`：ウィンドウ、スペース別セッション、タブ、メニュー、権限、保存と終了。
+- `src/page-view-host.cjs`：選択中のページだけをネイティブのビュー階層に接続。
+- `src/ui/tabs.js`：タブIDごとにボタンを保持し、必要な表示だけを更新。
 - `src/core.cjs`：サービス一覧、URL境界、復元データの検証、WebContentsの設定。
 - `src/notifications.cjs`：通知の選択の保存・検証。`notifications.json`は利用者データなので公開しない。
 - `src/passwords.cjs`：MacのsafeStorage非同期APIによる暗号化保存。`passwords.enc.json`は利用者データなので公開しない。
@@ -30,6 +32,8 @@ Electronの実装根拠：[macOS Keychain identity](https://github.com/electron/
 外部ページはsandbox・contextIsolationを有効にし、Node.jsやサイトから呼べるAPIを与えません。隔離されたsandbox preloadはログイン操作の観察だけを行います。ローカルUIのIPCは送信者とフレームを照合します。ポップアップではElectronから渡された`options.webContents`をそのままWebContentsViewに引き継ぎ、親と同じスペースのsessionを使います。これを新規WebContentsに置き換えるとログイン用ポップアップが壊れます。
 
 終了時はページの未保存確認を尊重し、Cookieをフラッシュして終了します。破棄済みビューからwebContentsを読み直さず、管理している参照を先に解放します。
+
+背景タブは非表示にするだけでなく、親ビューから取り外します。WebContentsは破棄せず、入力内容とログイン状態を保持します。設定画面の表示中はページを取り外し、閉じた候補ビューも取り外します。読み込み・タイトル更新でタブボタンを作り直さず、同じIDの要素を更新してください。macOSの操作対象が不要に入れ替わるのを抑えるためです。
 
 ## 更新の手順
 

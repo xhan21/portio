@@ -8,6 +8,7 @@ const { PasswordStore } = require('./passwords.cjs');
 const { PasswordController } = require('./password-controller.cjs');
 const { touchIDAuthenticator } = require('./password-auth.cjs');
 const { PasswordPopup } = require('./password-popup.cjs');
+const { PageViewHost } = require('./page-view-host.cjs');
 const { SPACES, SERVICES, name, webURL, resolveAddress, restorable, readState, preferences, shortcutData, reorderTabs, rememberSite, matchingSites } = require('./core.cjs');
 
 // Keep the original internal name: Chromium uses it for the cookie-encryption Keychain entry.
@@ -27,6 +28,7 @@ const sessions = {};
 let win, active = 'personal', sequence = 0, saveTimer, closing = false, finishing = false;
 let shortcutEditor = null, passwordManager, addressPopup;
 let notificationSettings = false, notificationError = '';
+const pageHost = new PageViewHost(() => win.contentView);
 const current = () => spaces[active].tabs.find(t => t.id === spaces[active].selected);
 const contents = t => t?.wc && !t.wc.isDestroyed() ? t.wc : null;
 const partition = s => 'persist:duo-' + s;
@@ -67,10 +69,10 @@ function layout() {
   if (!win || win.isDestroyed()) return;
   const [width, height] = win.getContentSize();
   const selected = current();
-  for (const s of SPACES) for (const t of spaces[s].tabs) if (contents(t)) {
-    t.view.setVisible(t === selected && !shortcutEditor && !notificationSettings && !passwordManager?.settings);
-    t.view.setBounds({ x: 224, y: t.error ? 138 : 96, width: Math.max(1, width - 224), height: Math.max(1, height - (t.error ? 138 : 96)) });
-  }
+  const view = contents(selected) && !shortcutEditor && !notificationSettings && !passwordManager?.settings ? selected.view : null;
+  if (pageHost.current !== view) addressPopup?.hide();
+  const y = selected?.error ? 138 : 96;
+  pageHost.show(view, { x: 224, y, width: Math.max(1, width - 224), height: Math.max(1, height - y) });
 }
 function update() { layout(); publish(); }
 function newTab(space, options = {}) {
@@ -89,10 +91,10 @@ function makeView(t, windowOptions = {}) {
   // instance so the opener, redirects and OAuth response target remain connected.
   t.view = new WebContentsView({ ...windowOptions, webPreferences: { ...windowOptions.webPreferences, ...preferences(partition(t.space)), session: sessions[t.space], preload: path.join(__dirname, 'login-preload.cjs') } });
   t.view.setBackgroundColor('#ffffff');
+  t.view.setVisible(false);
   const wc = t.view.webContents;
   t.wc = wc;
   passwordManager?.attach(t);
-  win.contentView.addChildView(t.view);
   const refreshURL = () => { t.url = wc.getURL(); t.error = ''; update(); };
   wc.on('did-start-loading', () => { t.loading = true; update(); });
   wc.on('did-stop-loading', () => { t.loading = false; if (!t.error) spaces[t.space].history = rememberSite(spaces[t.space].history, wc.getURL(), t.title); update(); });
@@ -131,7 +133,7 @@ function makeView(t, windowOptions = {}) {
   });
   wc.on('destroyed', () => {
     t.wc = null;
-    if (win && !win.isDestroyed()) win.contentView.removeChildView(t.view);
+    if (win && !win.isDestroyed()) pageHost.forget(t.view);
     if (closing) { finishClose(); return; }
     const list = spaces[t.space].tabs;
     const index = list.indexOf(t);
