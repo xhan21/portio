@@ -82,9 +82,25 @@ function pageOperation(operation, args) {
     if (!['http:', 'https:'].includes(url.protocol) || url.origin !== args.origin || (node.target && node.target !== '_self') || node.hasAttribute('download')) return fail('UNSUPPORTED_LINK', '別サイト・新規ウィンドウ・ダウンロードへのリンクは直接操作できません。');
   }
   node.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'instant' });
-  const rect = node.getBoundingClientRect();
-  const hit = document.elementFromPoint(Math.max(0, Math.min(innerWidth - 1, rect.left + rect.width / 2)), Math.max(0, Math.min(innerHeight - 1, rect.top + rect.height / 2)));
-  if (!hit || (hit !== node && !node.contains(hit))) return fail('OBSCURED', '対象が別の表示に隠れています。画面を確認してください。');
+  // A card may render its label in a sibling above its clickable surface.
+  // Check real, viewport-clipped fragments rather than only the bounding-box
+  // centre. Every accepted point must still hit this exact control or a child;
+  // a shared parent or an unrelated overlay never counts as the target.
+  let exposed = false;
+  for (const rect of [...node.getClientRects()].slice(0, 32)) {
+    const left = Math.max(0, rect.left), top = Math.max(0, rect.top);
+    const right = Math.min(innerWidth, rect.right), bottom = Math.min(innerHeight, rect.bottom);
+    if (right <= left || bottom <= top) continue;
+    const insetX = Math.min(2, (right - left) / 4), insetY = Math.min(2, (bottom - top) / 4);
+    const xs = [(left + right) / 2, left + insetX, right - insetX];
+    const ys = [(top + bottom) / 2, top + insetY, bottom - insetY];
+    exposed = xs.some(x => ys.some(y => {
+      const hit = document.elementFromPoint(x, y);
+      return hit === node || (hit && node.contains(hit));
+    }));
+    if (exposed) break;
+  }
+  if (!exposed) return fail('OBSCURED', '対象に届く位置を確認できませんでした。別の表示による重なりを確認してください。');
   if (operation === 'click') { node.click(); return { performed: 'click', verifyWith: 'portio_read' }; }
   if (operation === 'fill') {
     if (node.readOnly || !['INPUT', 'TEXTAREA'].includes(node.tagName) || (node.tagName === 'INPUT' && !['text','search','email','url','tel','number','date','datetime-local','month','week','time'].includes(node.type))) return fail('UNSUPPORTED_FIELD', 'この入力欄は自動入力に対応していません。');
