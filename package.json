@@ -1,7 +1,7 @@
 {
   "name": "portio",
   "productName": "Portio",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "description": "個人と大学、ふたつの作業場所を行き来するMacブラウザ",
   "private": true,
   "main": "src/main.cjs",
@@ -13,7 +13,7 @@
   },
   "devDependencies": {
     "@electron/packager": "20.3.0",
-    "electron": "45.2.1",
+    "electron": "45.4.1",
     "sharp": "0.35.5"
   },
   "author": "Xu Han (xhan21)",

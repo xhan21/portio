@@ -50,6 +50,19 @@ test('each begin creates a new space-specific tab and handles belong to one conn
   assert.equal(f.tabs[0].destroyed, false);
   f.controller.releaseOwner('second'); assert.equal(f.controller.works.size, 0);
 });
+test('unresolved spaces never create a tab; a resolved space opens only that account', async () => {
+  const f = fixture();
+  for (const args of [
+    { url: 'https://example.test' },
+    { space: 'auto', url: 'https://example.test' },
+    { space: ['personal', 'university'], url: 'https://example.test' }
+  ]) await assert.rejects(f.controller.invoke('owner', 'portio_begin', args));
+  assert.equal(f.tabs.length, 0); assert.equal(f.controller.works.size, 0);
+  const work = await f.begin('owner', 'university');
+  assert.equal(work.space, 'university');
+  assert.deepEqual(f.tabs.map(t => t.space), ['university']);
+  assert.equal(f.executions(), 0);
+});
 test('invalid destinations, locked UI, loading and changed origins never read page contents', async () => {
   const f = fixture();
   for (const url of ['file:///private/page', 'javascript:alert(1)', 'https://name:secret@example.test']) await rejects(f.begin('owner', 'personal', url), 'INVALID_DESTINATION');

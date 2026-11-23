@@ -65,7 +65,7 @@
   </dialog>
   <dialog id="ai-dialog" aria-labelledby="ai-title">
     <h2 id="ai-title">AI連携</h2>
-    <p>Codexから、指定したスペースの新しいタブで作業できます。<br>ほかのタブを読む必要はありません。</p>
+    <p>Codexから、新しいタブで作業できます。<br>個人用・大学用は依頼内容やプロジェクト設定から選び、分からない場合だけ確認します。</p>
     <p id="ai-status" role="status"></p>
     <div class="ai-controls"><button id="ai-enable" class="primary">連携を有効にする</button><button id="ai-disable">連携を停止する</button><button id="ai-release">作業へのアクセスをすべて解除</button></div>
     <p class="ai-hint">読み取ったページの内容は、利用するAIサービスへ渡ります。<br>ログイン済みのサイトでは、そのアカウントで操作します。</p>
@@ -73,7 +73,7 @@
     <p>初回に、Codexの設定 → MCP serversでPortioを追加します。<br>STDIOを選び、下のcommand・args・envを各欄に設定します。<br>プロジェクトごとの手順追加は不要です。</p>
     <textarea id="ai-config" readonly aria-label="Codexへの接続設定" rows="5" spellcheck="false"></textarea>
     <button id="ai-copy">接続設定をコピー</button><span id="ai-copied" role="status"></span>
-    <p class="ai-hint">接続後は新しいチャットで「Portioの大学用で、このURLを開いて」と依頼できます。Portioを起動し、連携を有効にしてお使いください。認証画面・埋め込み画面・一部の独自部品は手動操作が必要です。</p>
+    <p class="ai-hint">接続後は新しいチャットで「Portioで、このURLを開いて」と依頼できます。使うスペースが分かる場合は、毎回指定する必要はありません。Portioを起動し、連携を有効にしてお使いください。認証画面・埋め込み画面・一部の独自部品は手動操作が必要です。</p>
     <p id="ai-error" role="alert"></p>
     <div class="dialog-actions"><span></span><button id="ai-close" class="primary">閉じる</button></div>
   </dialog>

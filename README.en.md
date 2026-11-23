@@ -54,9 +54,9 @@ Type part of a previously visited site's title or URL in the address bar to see 
 
 ## Connect to Codex
 
-Open **AI連携 (AI connection)** in Portio, review the access explanation and enable it. Register the displayed local MCP configuration in Codex once, then ask for a URL in Portio's personal or university space. Portio creates a new task tab and limits page access to that tab. No per-project workflow files or additional Portio account are needed. Existing instructions to prefer Portio remain useful: installing MCP alone does not make Portio the default choice. See [setup and limits](docs/AI-CONNECTION.md).
+Open **AI連携 (AI connection)** in Portio, review the access explanation and enable it. Register the displayed local MCP configuration in Codex once, then ask to open a URL in Portio. The AI chooses personal or university from your request and project instructions, asking only when that choice is unclear or conflicting. You do not need to repeat the space when the context already identifies it. It does not probe both signed-in accounts to decide. Portio creates a new task tab and limits page access to that tab. No per-project workflow files or additional Portio account are needed. Existing instructions to prefer Portio remain useful: installing MCP alone does not make Portio the default choice. See [setup and limits](docs/AI-CONNECTION.md).
 
-The connection is off by default. Page content read through MCP is passed to the AI service you use, and actions on signed-in sites use that space's signed-in account. No separate hosted server, API key or Node.js installation is needed for the packaged app's connection. The AI service's own pricing and data policies still apply.
+The connection is off by default. Page content read through MCP is passed to the AI service you use, and actions on signed-in sites use that space's signed-in account. No separate hosted server, API key or Node.js installation is needed for the packaged app's connection. The AI service's own pricing and data policies still apply. Personal information in page text and ordinary input fields can be included in read results; excluding password fields does not identify every secret a site might display. See the [MCP and Electron data review](docs/AI-DATA-REVIEW.md).
 
 ## Limits and privacy
 
