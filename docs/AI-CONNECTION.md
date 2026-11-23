@@ -8,7 +8,7 @@ Portio 0.6.0には、このMac内で使うMCP接続が含まれます。新し�
 2. サイドバーの「AI連携」を開き、「連携を有効にする」を選びます。アクセス範囲の説明を確認してください。
 3. 「接続設定をコピー」で、このMacの配置場所に合った設定をコピーします。
 4. Codexの設定→MCP serversでSTDIOサーバーを追加します。名前は `portio`、Commandはコピーした設定の `command`、Argumentsは `args` の各項目、Environment variablesは `ELECTRON_RUN_AS_NODE=1` です。設定ファイルを使う場合は、コピーした `[mcp_servers.portio]` のブロックをユーザー設定の `config.toml` に追加します。同名の設定は重複させないでください。
-5. Portioの設定画面を閉じます。Codexで新しいチャットを開き、ツールが現れない場合はCodexを再起動します。
+5. Portioの設定画面を閉じます。CodexのMCP設定で「Restart」を選ぶか、Codexを再起動して接続設定を読み込みます。その後、新しいチャットで利用してください。
 
 例：「Portioの大学用で、https://example.com を開いて内容を確認して」。スペースとサイトを指定してください。アプリ内に接続用の実行環境を含むため、利用者がNode.jsを追加インストールする必要はありません。
 
