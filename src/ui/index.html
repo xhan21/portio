@@ -18,7 +18,7 @@
     <div class="divider"></div>
     <div class="service-heading"><p class="section-label">すぐに開く</p><button id="shortcut-add" aria-label="すぐに開くに追加" title="すぐに開くに追加">＋ 追加</button></div>
     <nav id="services"></nav>
-    <div class="sidebar-bottom"><button id="notifications">サイトの通知</button><button id="passwords">パスワード</button><button id="history-clear">このスペースのアクセス履歴を消去</button><button id="help">使い方とログインについて</button><small><span id="version"></span></small></div>
+    <div class="sidebar-bottom"><button id="ai">AI連携</button><button id="notifications">サイトの通知</button><button id="passwords">パスワード</button><button id="history-clear">このスペースのアクセス履歴を消去</button><button id="help">使い方とログインについて</button><small><span id="version"></span></small></div>
   </aside>
   <main>
     <header>
@@ -62,6 +62,20 @@
     </form>
     <div id="password-list"></div><p id="password-error" role="alert"></p>
     <div class="dialog-actions"><span></span><button id="passwords-close" class="primary">閉じる</button></div>
+  </dialog>
+  <dialog id="ai-dialog" aria-labelledby="ai-title">
+    <h2 id="ai-title">AI連携</h2>
+    <p>Codexから、指定したスペースの新しいタブで作業できます。<br>ほかのタブを読む必要はありません。</p>
+    <p id="ai-status" role="status"></p>
+    <div class="ai-controls"><button id="ai-enable" class="primary">連携を有効にする</button><button id="ai-disable">連携を停止する</button><button id="ai-release">作業へのアクセスをすべて解除</button></div>
+    <p class="ai-hint">読み取ったページの内容は、利用するAIサービスへ渡ります。<br>ログイン済みのサイトでは、そのアカウントで操作します。</p>
+    <h3>Codexに接続する</h3>
+    <p>初回に、Codexの設定 → MCP serversでPortioを追加します。<br>STDIOを選び、下のcommand・args・envを各欄に設定します。<br>プロジェクトごとの手順追加は不要です。</p>
+    <textarea id="ai-config" readonly aria-label="Codexへの接続設定" rows="5" spellcheck="false"></textarea>
+    <button id="ai-copy">接続設定をコピー</button><span id="ai-copied" role="status"></span>
+    <p class="ai-hint">接続後は新しいチャットで「Portioの大学用で、このURLを開いて」と依頼できます。Portioを起動し、連携を有効にしてお使いください。認証画面・埋め込み画面・一部の独自部品は手動操作が必要です。</p>
+    <p id="ai-error" role="alert"></p>
+    <div class="dialog-actions"><span></span><button id="ai-close" class="primary">閉じる</button></div>
   </dialog>
 </body>
 </html>

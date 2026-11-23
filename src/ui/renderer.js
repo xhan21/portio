@@ -41,7 +41,7 @@ function finishDrag(redraw = true) {
 }
 $('tabs').addEventListener('pointerdown', event => {
   const choose = event.target.closest('.tab-select');
-  if (!choose || event.button !== 0 || state.shortcutEditor || state.notificationSettings || state.passwordSettings) return;
+  if (!choose || event.button !== 0 || state.shortcutEditor || state.notificationSettings || state.passwordSettings || state.aiSettings) return;
   drag = { id: choose.closest('.tab').dataset.id, space: state.active, ids: state.tabs.map(t => t.id).join(','), x: event.clientX, y: event.clientY, startX: event.clientX, startY: event.clientY, pointerId: event.pointerId, element: choose, started: false };
   choose.setPointerCapture(event.pointerId);
 });
@@ -76,7 +76,9 @@ $('shortcut-form').addEventListener('submit', event => {
   event.preventDefault(); act('shortcut-save', JSON.stringify({ name: $('shortcut-name').value, url: $('shortcut-url').value }));
 });
 document.querySelectorAll('[data-space]').forEach(button => button.addEventListener('click', () => act('space', button.dataset.space)));
-for (const id of ['new', 'back', 'forward', 'reload', 'home', 'help', 'dismiss', 'notifications', 'notifications-close', 'passwords', 'passwords-close', 'password-cancel']) $(id).addEventListener('click', () => act(id));
+for (const id of ['new', 'back', 'forward', 'reload', 'home', 'help', 'dismiss', 'notifications', 'notifications-close', 'passwords', 'passwords-close', 'password-cancel', 'ai', 'ai-close', 'ai-enable', 'ai-disable', 'ai-release']) $(id).addEventListener('click', () => act(id));
+$('ai-dialog').addEventListener('cancel', event => { event.preventDefault(); act('ai-close'); });
+$('ai-copy').onclick = async () => { if (await act('ai-copy')) $('ai-copied').textContent = 'コピーしました'; };
 $('passwords-toolbar').onclick = () => act('passwords');
 $('password-dialog').addEventListener('cancel', event => { event.preventDefault(); act('passwords-close'); });
 $('password-add').onclick = async () => {
@@ -115,7 +117,7 @@ window.duo.onState(next => {
   $('notice').hidden = !next.current?.error;
   $('notice').querySelector('span').textContent = next.current?.error || '';
   // Loading/title updates must not replace the element being dragged.
-  if (drag && (drag.space !== next.active || drag.ids !== next.tabs.map(t => t.id).join(',') || next.shortcutEditor || next.notificationSettings || next.passwordSettings)) finishDrag();
+  if (drag && (drag.space !== next.active || drag.ids !== next.tabs.map(t => t.id).join(',') || next.shortcutEditor || next.notificationSettings || next.passwordSettings || next.aiSettings)) finishDrag();
   if (!drag) drawTabs();
   const serviceKey = JSON.stringify([next.active, next.services]);
   if (drawnServices !== serviceKey) {
@@ -140,6 +142,15 @@ window.duo.onState(next => {
     }
   } else if (modal.open) modal.close();
   drawPasswords(next.passwordSettings);
+  const ai = next.aiSettings, aiDialog = $('ai-dialog');
+  if (ai) {
+    $('ai-status').textContent = ai.enabled ? `連携は有効です · 作業 ${ai.works}件` : '連携は停止しています';
+    $('ai-enable').hidden = ai.enabled; $('ai-disable').hidden = !ai.enabled;
+    for (const id of ['ai-enable', 'ai-disable', 'ai-release', 'ai-close']) $(id).disabled = ai.busy;
+    $('ai-release').hidden = !ai.works; $('ai-error').textContent = ai.error;
+    $('ai-config').value = ai.config;
+    if (!aiDialog.open) { $('ai-copied').textContent = ''; aiDialog.showModal(); }
+  } else if (aiDialog.open) aiDialog.close();
   const settings = next.notificationSettings, notificationDialog = $('notification-dialog');
   if (settings) {
     $('notification-space').textContent = next.spaceName + '用スペース';

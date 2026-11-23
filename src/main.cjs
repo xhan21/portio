@@ -1,4 +1,4 @@
-const { app, BrowserWindow, WebContentsView, session, ipcMain, Menu, dialog, safeStorage, systemPreferences, powerMonitor } = require('electron');
+const { app, BrowserWindow, WebContentsView, session, ipcMain, Menu, dialog: nativeDialog, safeStorage, systemPreferences, powerMonitor, clipboard } = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
@@ -9,6 +9,8 @@ const { PasswordController } = require('./password-controller.cjs');
 const { touchIDAuthenticator } = require('./password-auth.cjs');
 const { PasswordPopup } = require('./password-popup.cjs');
 const { PageViewHost } = require('./page-view-host.cjs');
+const { AIController } = require('./ai/controller.cjs');
+const { LocalBridge } = require('./ai/connection.cjs');
 const { SPACES, SERVICES, name, webURL, resolveAddress, restorable, readState, preferences, shortcutData, reorderTabs, rememberSite, matchingSites } = require('./core.cjs');
 
 // Keep the original internal name: Chromium uses it for the cookie-encryption Keychain entry.
@@ -28,6 +30,18 @@ const sessions = {};
 let win, active = 'personal', sequence = 0, saveTimer, closing = false, finishing = false;
 let shortcutEditor = null, passwordManager, addressPopup;
 let notificationSettings = false, notificationError = '';
+let aiController, aiBridge, aiSettings = false, aiBusy = false, aiError = '', screenLocked = false;
+let nativePrompts = 0;
+const dialog = {
+  async showMessageBox(...args) {
+    nativePrompts++; aiController?.invalidateSnapshots();
+    try { return await nativeDialog.showMessageBox(...args); } finally { nativePrompts--; }
+  },
+  showMessageBoxSync(...args) {
+    nativePrompts++; aiController?.invalidateSnapshots();
+    try { return nativeDialog.showMessageBoxSync(...args); } finally { nativePrompts--; }
+  }
+};
 const pageHost = new PageViewHost(() => win.contentView);
 const current = () => spaces[active].tabs.find(t => t.id === spaces[active].selected);
 const contents = t => t?.wc && !t.wc.isDestroyed() ? t.wc : null;
@@ -59,6 +73,7 @@ function publish() {
     version: app.getVersion(), active, spaceName: name(active), services: servicesFor(active), shortcutEditor,
     passwordSettings: passwordManager?.settings || null,
     notificationSettings: notificationSettings ? { entries: notifications.list(active), error: notificationError } : null,
+    aiSettings: aiSettings ? { enabled: !!aiController?.enabled, busy: aiBusy, error: aiError, works: aiController?.works.size || 0, config: aiConnectionConfig() } : null,
     tabs: spaces[active].tabs.map(t => ({ id: t.id, title: t.title, selected: t.id === tab?.id, loading: t.loading })),
     current: tab ? { id: tab.id, url: tab.url, home: !tab.view, loading: tab.loading, error: tab.error, back: contents(tab)?.navigationHistory.canGoBack() || false, forward: contents(tab)?.navigationHistory.canGoForward() || false } : null
   });
@@ -69,7 +84,7 @@ function layout() {
   if (!win || win.isDestroyed()) return;
   const [width, height] = win.getContentSize();
   const selected = current();
-  const view = contents(selected) && !shortcutEditor && !notificationSettings && !passwordManager?.settings ? selected.view : null;
+  const view = contents(selected) && !shortcutEditor && !notificationSettings && !passwordManager?.settings && !aiSettings ? selected.view : null;
   if (pageHost.current !== view) addressPopup?.hide();
   const y = selected?.error ? 138 : 96;
   pageHost.show(view, { x: 224, y, width: Math.max(1, width - 224), height: Math.max(1, height - y) });
@@ -223,7 +238,31 @@ function help() {
   dialog.showMessageBox(win, { title: 'Portioの使い方', message: '個人と大学、ふたつの作業場所。', detail: `左側でスペースを選び、最初にそれぞれのアカウントでログインしてください。Canvaなどのログイン状態はスペースごとに保存します。\n\n「すぐに開く」の「＋ 追加」から、名前とURLを登録できます。追加した項目の「…」で編集・削除できます。タブのタイトルを左右にドラッグすると順番を変えられます。\n\nログイン操作をすると、Portioから保存するか確認します。案内が出ない場合は、右上の鍵ボタン→「＋ このサイトのログインを保存」から保存できます。次回は入力欄をクリックし、アカウントを選んでTouch IDで本人確認すると入力されます。Touch IDが利用できない場合は、サイトへ手入力してください。保存情報はこのMac内で暗号化し、サイト・スペースごとに分けます。\n\nアドレス欄でサイトの名前やURLを入力すると、このスペースで開いたサイトが候補に出ます。履歴は各スペース200件までで、サイドバーから消去できます。\n\nChromeやSafariとは別にログインしてください。Google・大学の認証方式によっては、このアプリからログインできない場合があります。\n\nPortio自体の月額料金はありません。この試作版にブラウザの自動更新はありません。更新版への入れ替えが必要です。\n\nPortio ${app.getVersion()} / Chromium ${process.versions.chrome}` });
 }
 function focusAddress() { passwordManager?.revoke(); win.webContents.focus(); win.webContents.send('duo:focus-address'); }
+function aiConnectionConfig() {
+  const quote = value => JSON.stringify(value);
+  return `[mcp_servers.portio]\ncommand = ${quote(process.execPath)}\nargs = [${quote(path.join(app.getAppPath(), 'src', 'ai', 'stdio.cjs'))}, "--connection-file", ${quote(path.join(app.getPath('userData'), 'ai-connection.json'))}]\nenv = { ELECTRON_RUN_AS_NODE = "1" }\n`;
+}
+async function setAIEnabled(enabled) {
+  if (aiBusy) return;
+  aiBusy = true; aiError = ''; publish();
+  try {
+    if (enabled) {
+      const { response } = await dialog.showMessageBox(win, { type: 'question', message: 'AI連携を有効にしますか？', detail: '接続したAIは、指定したスペースに新しいタブを開き、そのページを読んだり操作したりできます。ログイン済みのサイトでは、そのアカウントでの操作になります。読み取った内容は利用するAIサービスへ渡ります。\n\n既存タブや保存済みパスワードの取得機能はありません。いつでもここで連携を停止できます。', buttons: ['キャンセル', '有効にする'], defaultId: 0, cancelId: 0 });
+      if (response !== 1 || closing || !aiSettings) return;
+      await aiBridge.start();
+    } else await aiBridge.stop();
+    const file = path.join(app.getPath('userData'), 'ai-settings.json');
+    fs.writeFileSync(file + '.tmp', JSON.stringify({ enabled }), { mode: 0o600 }); fs.renameSync(file + '.tmp', file);
+  } catch {
+    await aiBridge.stop();
+    aiError = enabled ? 'AI連携を開始できませんでした。保存先と接続状態を確認してください。' : '連携は停止しましたが、停止の設定を保存できませんでした。次回起動時に連携状態を確認してください。';
+    if (!enabled) { try { fs.unlinkSync(path.join(app.getPath('userData'), 'ai-settings.json')); } catch {} }
+  }
+  finally { aiBusy = false; publish(); }
+}
 function action(kind, value) {
+  if (kind !== 'state') aiController?.invalidateSnapshots();
+  if (aiSettings && !['state', 'ai-close', 'ai-enable', 'ai-disable', 'ai-copy', 'ai-release'].includes(kind)) return;
   if (passwordManager?.settings && !['state', 'passwords-close', 'password-add', 'password-save', 'password-cancel', 'password-remove'].includes(kind)) return;
   if (shortcutEditor && !['state', 'shortcut-save', 'shortcut-remove', 'shortcut-cancel', 'help'].includes(kind)) return;
   if (notificationSettings && !['state', 'notifications-reset', 'notifications-close', 'help'].includes(kind)) return;
@@ -233,6 +272,12 @@ function action(kind, value) {
   if (kind !== 'state') passwordManager?.revoke();
   switch (kind) {
     case 'state': publish(); break;
+    case 'ai': aiSettings = true; aiError = ''; update(); break;
+    case 'ai-close': if (!aiBusy) { aiSettings = false; update(); } break;
+    case 'ai-enable': return setAIEnabled(true);
+    case 'ai-disable': return setAIEnabled(false);
+    case 'ai-copy': clipboard.writeText(aiConnectionConfig()); return true;
+    case 'ai-release': aiController.revokeAll(); publish(); break;
     case 'address-suggest': {
       const data = command(value), rect = data?.rect;
       if (!rect || !['x', 'y', 'width', 'height'].every(k => Number.isFinite(rect[k])) || typeof data.query !== 'string') break;
@@ -318,6 +363,7 @@ async function finishClose() {
   finishing = true;
   try { await Promise.race([Promise.all(Object.values(sessions).map(s => s.cookies.flushStore())), new Promise(resolve => setTimeout(resolve, 3000))]); } catch { /* OS also persists the partition. */ }
   for (const s of Object.values(sessions)) s.flushStorageData();
+  await aiBridge.stop();
   passwordManager.popup.destroy(); addressPopup.destroy();
   win.destroy(); win = null; app.quit();
 }
@@ -329,11 +375,22 @@ function start() {
     copyright: 'Copyright © 2026 Xu Han',
     credits: 'MIT License\nhttps://github.com/xhan21/portio'
   });
-  passwordManager = new PasswordController({ store: new PasswordStore(path.join(app.getPath('userData'), 'passwords.enc.json'), process.platform === 'darwin' ? safeStorage : null), Menu, popup: new PasswordPopup({ WebContentsView, parent: () => win }), dialog, current, window: () => win, space: () => active, canSuggest: () => !closing && !shortcutEditor && !notificationSettings, changed: update, authenticate: touchIDAuthenticator({ systemPreferences, dialog, window: () => win }) });
+  passwordManager = new PasswordController({ store: new PasswordStore(path.join(app.getPath('userData'), 'passwords.enc.json'), process.platform === 'darwin' ? safeStorage : null), Menu, popup: new PasswordPopup({ WebContentsView, parent: () => win }), dialog, current, window: () => win, space: () => active, canSuggest: () => !closing && !shortcutEditor && !notificationSettings && !aiSettings, changed: update, authenticate: touchIDAuthenticator({ systemPreferences, dialog, window: () => win }) });
   addressPopup = new PasswordPopup({ WebContentsView, parent: () => win });
-  for (const event of ['lock-screen', 'suspend', 'user-did-resign-active']) powerMonitor.on(event, () => { passwordManager.revoke(); addressPopup.hide(); });
+  for (const event of ['lock-screen', 'suspend', 'user-did-resign-active']) powerMonitor.on(event, () => { passwordManager.revoke(); addressPopup.hide(); screenLocked = true; aiController?.revokeAll(); });
+  for (const event of ['unlock-screen', 'resume', 'user-did-become-active']) powerMonitor.on(event, () => { screenLocked = false; });
   SPACES.forEach(setupSession);
   win = new BrowserWindow({ width: 1240, height: 820, minWidth: 960, minHeight: 640, title: 'Portio', titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 22, y: 20 }, backgroundColor: '#f8faf9', show: false, webPreferences: { ...preferences('duo-ui'), preload: path.join(__dirname, 'preload.cjs') } });
+  aiController = new AIController({
+    createTab: (space, url) => { passwordManager.revoke(); addressPopup.hide(); active = space; return contents(newTab(space, { url })); },
+    canOperate: () => !!win && !win.isDestroyed() && !win.webContents.isLoadingMainFrame() && !closing && !screenLocked && powerMonitor.getSystemIdleState(1) !== 'locked' && !nativePrompts && !aiSettings && !aiBusy && !shortcutEditor && !notificationSettings && !passwordManager.settings && !passwordManager.authenticating && !passwordManager.offers.busy && !passwordManager.pending && !passwordManager.popup.items.length && !addressPopup.items.length,
+    isSelected: (wc, space) => active === space && contents(current()) === wc,
+    changed: () => { if (win && !win.isDestroyed()) publish(); }
+  });
+  aiBridge = new LocalBridge({ directory: app.getPath('userData'), controller: aiController });
+  try {
+    if (JSON.parse(fs.readFileSync(path.join(app.getPath('userData'), 'ai-settings.json'), 'utf8')).enabled === true) void aiBridge.start().catch(() => { aiError = 'AI連携を開始できませんでした。設定画面で確認してください。'; });
+  } catch { /* AI access is off until explicitly enabled in the trusted UI. */ }
   for (const event of ['move', 'resize', 'blur']) win.on(event, () => { passwordManager.cancelMenu(); addressPopup.hide(); });
   win.webContents.on('before-input-event', (event, input) => { if (addressPopup.key(input)) event.preventDefault(); });
   win.webContents.on('will-navigate', event => event.preventDefault());
@@ -364,7 +421,7 @@ function start() {
     return action(kind, value);
   });
   Menu.setApplicationMenu(Menu.buildFromTemplate([
-    { label: 'Portio', submenu: [{ label: 'Portioについて', click: () => app.showAboutPanel() }, { label: 'サイトの通知…', click: () => action('notifications') }, { label: 'パスワード…', click: () => action('passwords') }, { type: 'separator' }, { role: 'hide', label: 'Portioを隠す' }, { role: 'hideOthers', label: 'ほかを隠す' }, { role: 'unhide', label: 'すべてを表示' }, { type: 'separator' }, { label: 'Portioを終了', accelerator: 'CmdOrCtrl+Q', click: () => win.close() }] },
+    { label: 'Portio', submenu: [{ label: 'Portioについて', click: () => app.showAboutPanel() }, { label: 'AI連携…', click: () => action('ai') }, { label: 'サイトの通知…', click: () => action('notifications') }, { label: 'パスワード…', click: () => action('passwords') }, { type: 'separator' }, { role: 'hide', label: 'Portioを隠す' }, { role: 'hideOthers', label: 'ほかを隠す' }, { role: 'unhide', label: 'すべてを表示' }, { type: 'separator' }, { label: 'Portioを終了', accelerator: 'CmdOrCtrl+Q', click: () => win.close() }] },
     { label: 'ファイル', submenu: [{ label: '新しいタブ', accelerator: 'CmdOrCtrl+T', click: () => action('new') }, { label: 'タブを閉じる', accelerator: 'CmdOrCtrl+W', click: () => closeTab(current()) }, { label: 'アドレスを入力', accelerator: 'CmdOrCtrl+L', click: focusAddress }] },
     { label: '編集', submenu: [{ role: 'undo' }, { role: 'redo' }, { type: 'separator' }, { role: 'cut' }, { role: 'copy' }, { role: 'paste' }, { role: 'selectAll' }] },
     { label: '表示', submenu: [{ label: '個人', accelerator: 'CmdOrCtrl+1', click: () => action('space', 'personal') }, { label: '大学', accelerator: 'CmdOrCtrl+2', click: () => action('space', 'university') }, { label: '再読み込み', accelerator: 'CmdOrCtrl+R', click: () => action('reload') }, { type: 'separator' }, { role: 'togglefullscreen' }] },

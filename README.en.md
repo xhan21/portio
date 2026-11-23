@@ -52,6 +52,12 @@ If a site does not trigger the prompt, use the key button and **「＋ このサ
 
 Type part of a previously visited site's title or URL in the address bar to see suggestions. Click a candidate, or use arrow keys and Enter. Each space keeps up to 200 recent sites locally across restarts; the sidebar can clear that space's history. Authentication pages, query strings and URL fragments are excluded from this candidate history. Typed prefixes are not sent to a search service.
 
+## Connect to Codex
+
+Open **AI連携 (AI connection)** in Portio, review the access explanation and enable it. Register the displayed local MCP configuration in Codex once, then ask for a URL in Portio's personal or university space. Portio creates a new task tab and limits page access to that tab. No per-project workflow files or additional Portio account are needed. Existing instructions to prefer Portio remain useful: installing MCP alone does not make Portio the default choice. See [setup and limits](docs/AI-CONNECTION.md).
+
+The connection is off by default. Page content read through MCP is passed to the AI service you use, and actions on signed-in sites use that space's signed-in account. No separate hosted server, API key or Node.js installation is needed for the packaged app's connection. The AI service's own pricing and data policies still apply.
+
 ## Limits and privacy
 
 - Built with Electron and Chromium; it is not Google Chrome.

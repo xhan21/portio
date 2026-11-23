@@ -10,3 +10,6 @@ aside{display:flex;flex-direction:column}aside>.brand,aside>.space,aside>.sectio
 
 /* Keep every sidebar utility action aligned, including newly added actions. */
 .sidebar-bottom>button{display:block;width:100%;min-height:32px;margin:0;padding:8px 0;border-radius:4px;text-align:left;font-size:10px;font-weight:400;line-height:1.6}
+#ai-dialog{padding:26px;border:1px solid #dfe6e0;border-radius:16px;color:var(--ink);background:#fbfcfa;box-shadow:0 16px 70px #14281b30;font-size:12px;width:600px;max-width:calc(100vw - 48px);max-height:calc(100vh - 48px);overflow:auto;line-height:1.7}#ai-dialog h3{font-size:14px;margin:24px 0 8px}.ai-controls{display:flex;gap:12px;flex-wrap:wrap}.ai-controls button,#ai-copy{border-radius:7px;padding:8px 12px;background:var(--soft)}.ai-controls .primary{background:var(--accent);color:white}.ai-hint{font-size:11px;color:var(--muted)}#ai-config{width:100%;resize:vertical;font:11px ui-monospace,monospace;line-height:1.6;border:1px solid #dfe6e0;border-radius:7px;padding:10px;color:var(--ink);background:#f8faf8}#ai-copied{font-size:11px;margin-left:10px;color:var(--accent)}#ai-error{font-size:12px;color:#a34232}
+
+#ai-dialog::backdrop{background:#14281b35}#ai-title{font-size:18px;margin:0 0 10px}#ai-status{font-weight:600;color:var(--accent)}
