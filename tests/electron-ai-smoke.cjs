@@ -69,6 +69,7 @@ async function run() {
   assert.ok(snapshot.text.includes('架空の操作テスト'));
   for (const secret of ['PASSWORD-PRIVATE','LOGIN-PRIVATE','HIDDEN-PRIVATE','HIDDEN-TEXT','OTP-PRIVATE','FRAME-PRIVATE','UNRELATED-EXISTING-TAB']) assert.ok(!JSON.stringify(snapshot).includes(secret), secret);
   assert.equal(snapshot.unsupportedFrames, 1); passed.push('scoped new tab; hidden, password, login and frame values excluded');
+  await personal.executeJavaScript("const activity=document.createElement('p');activity.id='autosave';activity.textContent='自動保存中';document.body.append(activity)");
   const click = snapshot.elements.find(e => e.name === 'カウント');
   await call(client, 'portio_click', { work: a.work, snapshot: snapshot.snapshot, ref: click.ref });
   await until(() => events.length === 1); snapshot = await read(client, a.work); assert.ok(snapshot.text.includes('クリック 1'));
@@ -78,7 +79,7 @@ async function run() {
   const select = snapshot.elements.find(e => e.name === '表示期間');
   await call(client, 'portio_select', { work: a.work, snapshot: snapshot.snapshot, ref: select.ref, value: 'month' });
   snapshot = await read(client, a.work); assert.ok(snapshot.elements.some(e => e.name === '表示期間' && e.value === 'month'));
-  passed.push('real Chromium click, input, select; independent HTTP event receipt');
+  passed.push('real Chromium click after unrelated DOM update, input, select; independent HTTP event receipt');
   const oldSnapshot = snapshot;
   await personal.executeJavaScript("document.querySelector('#countButton').textContent='変更されたボタン'");
   assert.equal((await raw(client, 'portio_click', { work: a.work, snapshot: oldSnapshot.snapshot, ref: oldSnapshot.elements.find(e => e.name === 'カウント').ref })).error, 'STALE_SNAPSHOT');
